@@ -1,0 +1,7 @@
+*.swp
+build
+.DS_Store
+.sconsign.dblite
+*.pyc
+*.swo
+build_test
