@@ -10,7 +10,7 @@ namespace str{
 template<typename... Args>
 void print(Args const&... args)
 {
-    std::cout << dump(" ", args...) << std::endl;
+    std::cout << dump(args...) << std::endl;
 }
 
 }

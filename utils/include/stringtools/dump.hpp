@@ -47,6 +47,15 @@ struct Dump<bool>
     }
 };
 
+template<>
+struct Dump<std::string>
+{
+    static void to_string(std::string& output,std::string const& s)
+    {
+        output += "\"" + s + "\"";
+    }
+};
+
 template<typename T,typename T2>
 struct Dump<std::pair<T,T2>>
 {
@@ -82,27 +91,26 @@ struct Dump<std::map<T,T2>>
 
 
 template<typename T>
-void expand_string(std::string const& seperator, std::string& output,T const& t)
+void expand_string(std::string& output,T const& t)
 {
     Dump<T>::to_string(output,t);
 }
 
 template<typename T,typename... Args>
-void expand_string(std::string const& seperator, std::string& output,
-    T const& t, Args const&...args)
+void expand_string(std::string& output, T const& t, Args const&...args)
 {
     Dump<T>::to_string(output,t);
-    output += seperator;
-    expand_string(seperator, output, args...);
+    output += " ";
+    expand_string(output,args...);
 }
 
 }
 
 template<typename... Args>
-std::string dump(std::string const& seperator, Args const&... args)
+std::string dump(Args const&... args)
 {
     std::string output;
-    _::expand_string(seperator, output, args...);
+    _::expand_string(output,args...);
     return output;
 }
 

@@ -78,7 +78,8 @@ int main(int argc, char* argv[]) {
 
     // extract filename and its path from command line arguments
     std::string filename = argv[1];
-    std::string path = filename.substr(0, filename.find_last_of("/"));
+    auto filenamePos = filename.find_last_of("/");
+    std::string path = filenamePos == std::string::npos ? "./" : filename.substr(0, filenamePos);
 
     str::print("----------------------------------------------------");
     str::print("Load model from config file:", argv[1]);
@@ -124,7 +125,7 @@ int main(int argc, char* argv[]) {
 
     if (meshConfig["meshPath"].type != json_none) {
         // load mesh from file
-        std::string meshPath = str::join("/")(path, std::string(meshConfig["meshPath"]));
+        std::string meshPath = str::format("%s/%s")(path, std::string(meshConfig["meshPath"]));
         str::print("Load mesh from files:", meshPath);
 
         auto nodes = numeric::Matrix<dtype::real>::loadtxt(str::format("%s/nodes.txt")(meshPath), cudaStream);
@@ -220,7 +221,7 @@ int main(int argc, char* argv[]) {
     // load predefined gamma distribution from file, if path is given
     std::shared_ptr<numeric::Matrix<dtype::real>> gamma = nullptr;
     if (modelConfig["gammaFile"].type != json_none) {
-        gamma = numeric::Matrix<dtype::real>::loadtxt(str::join("/")(path, std::string(modelConfig["gammaFile"])), cudaStream);
+        gamma = numeric::Matrix<dtype::real>::loadtxt(str::format("%s/%s")(path, std::string(modelConfig["gammaFile"])), cudaStream);
     }
     else {
         gamma = std::make_shared<numeric::Matrix<dtype::real>>(mesh->elements->rows, 1, cudaStream, 1.0f);
@@ -261,19 +262,12 @@ int main(int argc, char* argv[]) {
     str::print("----------------------------------------------------");
     str::print("Result:");
     result->savetxt(&std::cout);
-    result->savetxt("Data/result.txt");
+    result->savetxt(str::format("%s/result.txt")(path));
 
     // save potential to file
     potential->copyToHost(cudaStream);
     cudaStreamSynchronize(cudaStream);
-    potential->savetxt("Data/phi.txt");
-
-    auto temp = std::make_shared<numeric::Matrix<dtype::real>>(equation->excitationMatrix->rows,
-        equation->excitationMatrix->cols, cudaStream);
-    temp->copy(equation->excitationMatrix, cudaStream);
-    temp->copyToHost(cudaStream);
-    cudaStreamSynchronize(cudaStream);
-    temp->savetxt("excitationMatrix.txt");
+    potential->savetxt(str::format("%s/potential.txt")(path));
 
     // cleanup
     json_value_free(config);
