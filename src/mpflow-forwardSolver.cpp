@@ -262,12 +262,12 @@ int main(int argc, char* argv[]) {
     str::print("----------------------------------------------------");
     str::print("Result:");
     result->savetxt(&std::cout);
-    result->savetxt("Data/result.txt");
+    result->savetxt(str::format("%s/result.txt")(path));
 
     // save potential to file
     potential->copyToHost(cudaStream);
     cudaStreamSynchronize(cudaStream);
-    potential->savetxt("Data/potential.txt");
+    potential->savetxt(str::format("%s/potential.txt")(path));
 
     // cleanup
     json_value_free(config);
