@@ -223,7 +223,7 @@ int main(int argc, char* argv[]) {
         gamma = numeric::Matrix<dtype::real>::loadtxt(str::join("/")(path, std::string(modelConfig["gammaFile"])), cudaStream);
     }
     else {
-        gamma = std::make_shared<numeric::Matrix<dtype::real>>(mesh->elements->rows, 1, cudaStream);
+        gamma = std::make_shared<numeric::Matrix<dtype::real>>(mesh->elements->rows, 1, cudaStream, 1.0f);
     }
 
     // Create forward solver and solve potential
@@ -267,6 +267,13 @@ int main(int argc, char* argv[]) {
     potential->copyToHost(cudaStream);
     cudaStreamSynchronize(cudaStream);
     potential->savetxt("Data/phi.txt");
+
+    auto temp = std::make_shared<numeric::Matrix<dtype::real>>(equation->excitationMatrix->rows,
+        equation->excitationMatrix->cols, cudaStream);
+    temp->copy(equation->excitationMatrix, cudaStream);
+    temp->copyToHost(cudaStream);
+    cudaStreamSynchronize(cudaStream);
+    temp->savetxt("excitationMatrix.txt");
 
     // cleanup
     json_value_free(config);
