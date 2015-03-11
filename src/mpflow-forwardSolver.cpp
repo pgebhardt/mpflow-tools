@@ -211,7 +211,7 @@ int main(int argc, char* argv[]) {
     str::print("----------------------------------------------------");
     str::print("Create main model class");
 
-    auto equation = std::make_shared<FEM::Equation<dtype::real, FEM::basis::Linear>>(
+    auto equation = std::make_shared<FEM::Equation<dtype::real, FEM::basis::Linear, false>>(
         mesh, electrodes, modelConfig["referenceValue"].u.dbl, cudaStream);
 
     cudaStreamSynchronize(cudaStream);
@@ -235,7 +235,7 @@ int main(int argc, char* argv[]) {
     std::shared_ptr<numeric::Matrix<dtype::real>> result = nullptr, potential = nullptr;
     dtype::index steps = 0;
     if (sourceType == FEM::SourceDescriptor::Type::Fixed) {
-        auto forwardSolver = std::make_shared<EIT::ForwardSolver<FEM::basis::Linear, numeric::BiCGSTAB>>(
+        auto forwardSolver = std::make_shared<EIT::ForwardSolver<FEM::basis::Linear, numeric::BiCGSTAB, false>>(
             equation, source, modelConfig["componentsCount"].u.integer, cublasHandle, cudaStream);
 
         time.restart();
@@ -243,7 +243,7 @@ int main(int argc, char* argv[]) {
         potential = forwardSolver->phi[0];
     }
     else {
-        auto forwardSolver = std::make_shared<EIT::ForwardSolver<FEM::basis::Linear, numeric::ConjugateGradient>>(
+        auto forwardSolver = std::make_shared<EIT::ForwardSolver<FEM::basis::Linear, numeric::ConjugateGradient, false>>(
             equation, source, modelConfig["componentsCount"].u.integer, cublasHandle, cudaStream);
 
         time.restart();
