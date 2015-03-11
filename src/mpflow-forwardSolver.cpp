@@ -76,10 +76,14 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
 
+    // extract filename and its path from command line arguments
+    std::string filename = argv[1];
+    std::string path = filename.substr(0, filename.find_last_of("/"));
+
     str::print("----------------------------------------------------");
     str::print("Load model from config file:", argv[1]);
 
-    std::ifstream file(argv[1]);
+    std::ifstream file(filename);
     std::string fileContent((std::istreambuf_iterator<char>(file)),
         std::istreambuf_iterator<char>());
     auto config = json_parse(fileContent.c_str(), fileContent.length());
@@ -120,12 +124,12 @@ int main(int argc, char* argv[]) {
 
     if (meshConfig["meshPath"].type != json_none) {
         // load mesh from file
-        std::string meshDir(meshConfig["meshPath"]);
-        str::print("Load mesh from files:", meshDir);
+        std::string meshPath = str::join("/")(path, std::string(meshConfig["meshPath"]));
+        str::print("Load mesh from files:", meshPath);
 
-        auto nodes = numeric::Matrix<dtype::real>::loadtxt(str::format("%s/nodes.txt")(meshDir), cudaStream);
-        auto elements = numeric::Matrix<dtype::index>::loadtxt(str::format("%s/elements.txt")(meshDir), cudaStream);
-        auto boundary = numeric::Matrix<dtype::index>::loadtxt(str::format("%s/boundary.txt")(meshDir), cudaStream);
+        auto nodes = numeric::Matrix<dtype::real>::loadtxt(str::format("%s/nodes.txt")(meshPath), cudaStream);
+        auto elements = numeric::Matrix<dtype::index>::loadtxt(str::format("%s/elements.txt")(meshPath), cudaStream);
+        auto boundary = numeric::Matrix<dtype::index>::loadtxt(str::format("%s/boundary.txt")(meshPath), cudaStream);
         mesh = std::make_shared<numeric::IrregularMesh>(nodes, elements, boundary, radius, (double)meshConfig["height"]);
 
         str::print("Mesh loaded with", nodes->rows, "nodes and", elements->rows, "elements");
@@ -216,7 +220,7 @@ int main(int argc, char* argv[]) {
     // load predefined gamma distribution from file, if path is given
     std::shared_ptr<numeric::Matrix<dtype::real>> gamma = nullptr;
     if (modelConfig["gammaFile"].type != json_none) {
-        gamma = numeric::Matrix<dtype::real>::loadtxt(std::string(modelConfig["gammaFile"]), cudaStream);
+        gamma = numeric::Matrix<dtype::real>::loadtxt(str::join("/")(path, std::string(modelConfig["gammaFile"])), cudaStream);
     }
     else {
         gamma = std::make_shared<numeric::Matrix<dtype::real>>(mesh->elements->rows, 1, cudaStream);
@@ -250,7 +254,7 @@ int main(int argc, char* argv[]) {
     cudaStreamSynchronize(cudaStream);
     str::print("Time:", time.elapsed() * 1e3, "ms, Steps:", steps, "Tolerance:", tolerance);
 
-    // Print result
+    // Print result and save results
     result->copyToHost(cudaStream);
     cudaStreamSynchronize(cudaStream);
 

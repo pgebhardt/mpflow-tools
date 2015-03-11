@@ -2,6 +2,7 @@
 #define _0be72e07_d229_4b79_981d_61812416f783
 
 #include <string>
+#include "stringtools/dump.hpp"
 
 namespace str{
 
@@ -14,17 +15,9 @@ public:
         seperator(seperator)
     {}
 
-    template<typename Strings>
-    std::string operator () (Strings const& strings) const
-    {
-        std::string joined;
-        for(std::string const& s: strings){
-            if(joined.size()){
-                joined += seperator;
-            }
-            joined += s;
-        }
-        return joined;
+    template<typename... Args>
+    std::string operator () (Args const&... args) const {
+        return dump(this->seperator, args...);
     }
 };
 
