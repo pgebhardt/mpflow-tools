@@ -60,12 +60,12 @@ int main(int argc, char* argv[]) {
             16, std::make_tuple(0.03, 0.1), 1.0, 0.0);
 
         // create pattern
-        auto drivePattern = numeric::Matrix<dtype::real>::eye(electrodes->count, cudaStream);
-        auto measurementPattern = numeric::Matrix<dtype::real>::eye(electrodes->count, cudaStream);
+        auto drivePattern = numeric::Matrix<dtype::integral>::eye(electrodes->count, cudaStream);
+        auto measurementPattern = numeric::Matrix<dtype::integral>::eye(electrodes->count, cudaStream);
 
         // create source
-        auto source = std::make_shared<FEM::SourceDescriptor>(
-            FEM::SourceDescriptor::Type::Fixed, 1.0, electrodes,
+        auto source = std::make_shared<FEM::SourceDescriptor<dtype::real>>(
+            FEM::SourceDescriptor<dtype::real>::Type::Fixed, 1.0, electrodes,
             drivePattern, measurementPattern, cudaStream);
 
         // create equation
@@ -83,8 +83,8 @@ int main(int argc, char* argv[]) {
         str::print("--------------------------");
         str::print("Solve electrical potential for all excitations");
 
-        auto forwardSolver = std::make_shared<EIT::ForwardSolver<FEM::basis::Linear,
-            numeric::BiCGSTAB>>(equation, source, 1, cublasHandle, cudaStream);
+        auto forwardSolver = std::make_shared<EIT::ForwardSolver<numeric::BiCGSTAB>>(
+            equation, source, 1, cublasHandle, cudaStream);
         auto gamma = std::make_shared<numeric::Matrix<dtype::real>>(mesh->elements->rows, 1,
             cudaStream);
 

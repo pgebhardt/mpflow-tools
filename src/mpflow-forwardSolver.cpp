@@ -171,20 +171,20 @@ int main(int argc, char* argv[]) {
     str::print("Create model helper classes");
 
     // load excitation and measurement pattern from config or assume standard pattern, if not given
-    std::shared_ptr<numeric::Matrix<dtype::real>> drivePattern = nullptr;
+    std::shared_ptr<numeric::Matrix<dtype::integral>> drivePattern = nullptr;
     if (modelConfig["source"]["drivePattern"].type != json_none) {
-        drivePattern = matrixFromJsonArray<dtype::real>(modelConfig["source"]["drivePattern"], cudaStream);
+        drivePattern = matrixFromJsonArray<dtype::integral>(modelConfig["source"]["drivePattern"], cudaStream);
     }
     else {
-        drivePattern = numeric::Matrix<dtype::real>::eye(electrodes->count, cudaStream);;
+        drivePattern = numeric::Matrix<dtype::integral>::eye(electrodes->count, cudaStream);;
     }
 
-    std::shared_ptr<numeric::Matrix<dtype::real>> measurementPattern = nullptr;
+    std::shared_ptr<numeric::Matrix<dtype::integral>> measurementPattern = nullptr;
     if (modelConfig["source"]["measurementPattern"].type != json_none) {
-        measurementPattern = matrixFromJsonArray<dtype::real>(modelConfig["source"]["measurementPattern"], cudaStream);
+        measurementPattern = matrixFromJsonArray<dtype::integral>(modelConfig["source"]["measurementPattern"], cudaStream);
     }
     else {
-        measurementPattern = numeric::Matrix<dtype::real>::eye(electrodes->count, cudaStream);;
+        measurementPattern = numeric::Matrix<dtype::integral>::eye(electrodes->count, cudaStream);;
     }
 
     // read out currents
@@ -200,8 +200,8 @@ int main(int argc, char* argv[]) {
 
     // create source descriptor
     auto sourceType = std::string(modelConfig["source"]["type"]) == "voltage" ?
-        FEM::SourceDescriptor::Type::Fixed : FEM::SourceDescriptor::Type::Open;
-    auto source = std::make_shared<FEM::SourceDescriptor>(sourceType, excitation, electrodes,
+        FEM::SourceDescriptor<dtype::real>::Type::Fixed : FEM::SourceDescriptor<dtype::real>::Type::Open;
+    auto source = std::make_shared<FEM::SourceDescriptor<dtype::real>>(sourceType, excitation, electrodes,
         drivePattern, measurementPattern, cudaStream);
 
     cudaStreamSynchronize(cudaStream);
@@ -235,8 +235,8 @@ int main(int argc, char* argv[]) {
     // use different numeric solver for different source types
     std::shared_ptr<numeric::Matrix<dtype::real>> result = nullptr, potential = nullptr;
     dtype::index steps = 0;
-    if (sourceType == FEM::SourceDescriptor::Type::Fixed) {
-        auto forwardSolver = std::make_shared<EIT::ForwardSolver<FEM::basis::Linear, numeric::BiCGSTAB, false>>(
+    if (sourceType == FEM::SourceDescriptor<dtype::real>::Type::Fixed) {
+        auto forwardSolver = std::make_shared<EIT::ForwardSolver<numeric::BiCGSTAB, decltype(equation)::element_type>>(
             equation, source, modelConfig["componentsCount"].u.integer, cublasHandle, cudaStream);
 
         time.restart();
@@ -244,7 +244,7 @@ int main(int argc, char* argv[]) {
         potential = forwardSolver->phi[0];
     }
     else {
-        auto forwardSolver = std::make_shared<EIT::ForwardSolver<FEM::basis::Linear, numeric::ConjugateGradient, false>>(
+        auto forwardSolver = std::make_shared<EIT::ForwardSolver<numeric::ConjugateGradient, decltype(equation)::element_type>>(
             equation, source, modelConfig["componentsCount"].u.integer, cublasHandle, cudaStream);
 
         time.restart();

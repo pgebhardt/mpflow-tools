@@ -20,17 +20,17 @@ int main(int argc, char* argv[]) {
 
     // create model classes corresponding to ERT 2.0 measurement system
     // create standard pattern
-    auto drivePattern = std::make_shared<numeric::Matrix<dtype::real>>(36, 18, cudaStream);
-    auto measurementPattern = std::make_shared<numeric::Matrix<dtype::real>>(36, 18, cudaStream);
+    auto drivePattern = std::make_shared<numeric::Matrix<dtype::integral>>(36, 18, cudaStream);
+    auto measurementPattern = std::make_shared<numeric::Matrix<dtype::integral>>(36, 18, cudaStream);
     for (dtype::index i = 0; i < drivePattern->cols; ++i) {
         // simple ERT 2.0 pattern
-        (*drivePattern)(i * 2, i) = 1.0 - (i % 2) * 2.0;
-        (*drivePattern)(((i + 1) * 2) % drivePattern->rows, i) = -1.0 + (i % 2) * 2.0;
+        (*drivePattern)(i * 2, i) = 1 - (i % 2) * 2;
+        (*drivePattern)(((i + 1) * 2) % drivePattern->rows, i) = -1 + (i % 2) * 2;
     }
     for (dtype::index i = 0; i < measurementPattern->cols; ++i) {
         // simple ERT 2.0 pattern
-        (*measurementPattern)(i * 2 + 1, i) = 1.0 - (i % 2) * 2.0;
-        (*measurementPattern)(((i + 1) * 2 + 1) % measurementPattern->rows, i) = -1.0 + (i % 2) * 2.0;
+        (*measurementPattern)(i * 2 + 1, i) = 1 - (i % 2) * 2;
+        (*measurementPattern)(((i + 1) * 2 + 1) % measurementPattern->rows, i) = -1 + (i % 2) * 2;
     }
     drivePattern->copyToDevice(cudaStream);
     measurementPattern->copyToDevice(cudaStream);
@@ -59,8 +59,8 @@ int main(int argc, char* argv[]) {
         36, std::make_tuple(0.005, 0.005), RADIUS, 0.0);
 
     // create source
-    auto source = std::make_shared<FEM::SourceDescriptor>(
-        FEM::SourceDescriptor::Type::Open, 1.0, electrodes,
+    auto source = std::make_shared<FEM::SourceDescriptor<dtype::real>>(
+        FEM::SourceDescriptor<dtype::real>::Type::Open, 1.0, electrodes,
         drivePattern, measurementPattern, cudaStream);
 
     time.restart();
@@ -85,7 +85,7 @@ int main(int argc, char* argv[]) {
     str::print("----------------------------------------------------");
     str::print("Create main solver class");
 
-    auto solver = std::make_shared<EIT::Solver<FEM::basis::Linear, numeric::ConjugateGradient>>(
+    auto solver = std::make_shared<EIT::Solver<numeric::ConjugateGradient>>(
         equation, source, 7, 1, 0.0, cublasHandle, cudaStream);
 
     cudaStreamSynchronize(cudaStream);
@@ -106,7 +106,7 @@ int main(int argc, char* argv[]) {
 
     for (const auto& pipelineLength : pipelineLengths) {
         // create inverse solver
-        solver = std::make_shared<EIT::Solver<FEM::basis::Linear, numeric::ConjugateGradient>>(
+        solver = std::make_shared<EIT::Solver<numeric::ConjugateGradient>>(
             equation, source, 7, pipelineLength, 0.0, cublasHandle, cudaStream);
 
         cudaStreamSynchronize(cudaStream);
