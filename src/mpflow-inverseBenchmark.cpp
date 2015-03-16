@@ -20,14 +20,14 @@ int main(int argc, char* argv[]) {
 
     // create model classes corresponding to ERT 2.0 measurement system
     // create standard pattern
-    auto drivePattern = std::make_shared<numeric::Matrix<dtype::integral>>(36, 18, cudaStream);
-    auto measurementPattern = std::make_shared<numeric::Matrix<dtype::integral>>(36, 18, cudaStream);
-    for (dtype::index i = 0; i < drivePattern->cols; ++i) {
+    auto drivePattern = std::make_shared<numeric::Matrix<int>>(36, 18, cudaStream);
+    auto measurementPattern = std::make_shared<numeric::Matrix<int>>(36, 18, cudaStream);
+    for (unsigned i = 0; i < drivePattern->cols; ++i) {
         // simple ERT 2.0 pattern
         (*drivePattern)(i * 2, i) = 1 - (i % 2) * 2;
         (*drivePattern)(((i + 1) * 2) % drivePattern->rows, i) = -1 + (i % 2) * 2;
     }
-    for (dtype::index i = 0; i < measurementPattern->cols; ++i) {
+    for (unsigned i = 0; i < measurementPattern->cols; ++i) {
         // simple ERT 2.0 pattern
         (*measurementPattern)(i * 2 + 1, i) = 1 - (i % 2) * 2;
         (*measurementPattern)(((i + 1) * 2 + 1) % measurementPattern->rows, i) = -1 + (i % 2) * 2;
@@ -49,18 +49,16 @@ int main(int argc, char* argv[]) {
     str::print("Time:", time.elapsed() * 1e3, "ms");
 
     // create mpflow mesh object
-    auto mesh = std::make_shared<numeric::IrregularMesh>(
-        numeric::matrix::fromEigen<dtype::real, double>(std::get<0>(dist_mesh), cudaStream),
-        numeric::matrix::fromEigen<dtype::index, int>(std::get<1>(dist_mesh), cudaStream),
-        numeric::matrix::fromEigen<dtype::index, int>(boundary, cudaStream), RADIUS, 0.4);
+    auto mesh = std::make_shared<numeric::IrregularMesh>(std::get<0>(dist_mesh),
+        std::get<1>(dist_mesh), boundary, RADIUS, 0.4);
 
     // create electrodes
     auto electrodes = FEM::boundaryDescriptor::circularBoundary(
         36, std::make_tuple(0.005, 0.005), RADIUS, 0.0);
 
     // create source
-    auto source = std::make_shared<FEM::SourceDescriptor<dtype::real>>(
-        FEM::SourceDescriptor<dtype::real>::Type::Open, 1.0, electrodes,
+    auto source = std::make_shared<FEM::SourceDescriptor<float>>(
+        FEM::SourceDescriptor<float>::Type::Open, 1.0, electrodes,
         drivePattern, measurementPattern, cudaStream);
 
     time.restart();
@@ -68,15 +66,15 @@ int main(int argc, char* argv[]) {
     str::print("Create equation model class");
 
     // create equation
-    auto equation = std::make_shared<FEM::Equation<dtype::real, FEM::basis::Linear>>(
+    auto equation = std::make_shared<FEM::Equation<float, FEM::basis::Linear>>(
         mesh, electrodes, 1.0, cudaStream);
 
     cudaStreamSynchronize(cudaStream);
     str::print("Time:", time.elapsed() * 1e3, "ms");
 
     // benchmark different pipeline lengths
-    std::array<dtype::index, 512> pipelineLengths;
-    for (dtype::index i = 0; i < pipelineLengths.size(); ++i) {
+    std::array<unsigned, 512> pipelineLengths;
+    for (unsigned i = 0; i < pipelineLengths.size(); ++i) {
         pipelineLengths[i] = i + 1;
     }
 
@@ -112,14 +110,14 @@ int main(int argc, char* argv[]) {
         cudaStreamSynchronize(cudaStream);
         time.restart();
 
-        for (dtype::index i = 0; i < 10; ++i) {
+        for (unsigned i = 0; i < 10; ++i) {
             solver->solveDifferential(cublasHandle, cudaStream);
         }
 
         cudaStreamSynchronize(cudaStream);
         str::print("pipeline length:", pipelineLength, "; time:",
             time.elapsed() / 10.0 * 1e3, "ms ; fps:",
-            (dtype::real)pipelineLength / (time.elapsed() / 10.0));
+            (double)pipelineLength / (time.elapsed() / 10.0));
     }
 
     return EXIT_SUCCESS;

@@ -5,18 +5,6 @@
 
 using namespace mpFlow;
 
-// helper function to create unit matrix
-template <class type>
-std::shared_ptr<numeric::Matrix<type>> eye(dtype::index size, cudaStream_t cudaStream) {
-    auto matrix = std::make_shared<numeric::Matrix<type>>(size, size, cudaStream);
-    for (dtype::index i = 0; i < size; ++i) {
-        (*matrix)(i, i) = 1;
-    }
-    matrix->copyToDevice(cudaStream);
-
-    return matrix;
-}
-
 int main(int argc, char* argv[]) {
     HighPrecisionTime time;
 
@@ -31,8 +19,8 @@ int main(int argc, char* argv[]) {
 
     // solve complete forward problem for a common ECT measurement setup for increasing
     // mesh density
-    dtype::real density = 1.0;
-    for (dtype::index i = 0; i < 16; ++i) {
+    double density = 1.0;
+    for (unsigned i = 0; i < 16; ++i) {
         // Create Mesh using libdistmesh
         time.restart();
         str::print("----------------------------------------------------");
@@ -50,22 +38,20 @@ int main(int argc, char* argv[]) {
         density /= std::sqrt(2.0);
 
         // create mpflow mesh object
-        auto mesh = std::make_shared<numeric::IrregularMesh>(
-            numeric::matrix::fromEigen<dtype::real, double>(std::get<0>(dist_mesh), cudaStream),
-            numeric::matrix::fromEigen<dtype::index, int>(std::get<1>(dist_mesh), cudaStream),
-            numeric::matrix::fromEigen<dtype::index, int>(boundary, cudaStream), 1.0, 1.0);
+        auto mesh = std::make_shared<numeric::IrregularMesh>(std::get<0>(dist_mesh),
+            std::get<1>(dist_mesh), boundary, 1.0, 1.0);
 
         // create electrodes
         auto electrodes = FEM::boundaryDescriptor::circularBoundary(
             16, std::make_tuple(0.03, 0.1), 1.0, 0.0);
 
         // create pattern
-        auto drivePattern = numeric::Matrix<dtype::integral>::eye(electrodes->count, cudaStream);
-        auto measurementPattern = numeric::Matrix<dtype::integral>::eye(electrodes->count, cudaStream);
+        auto drivePattern = numeric::Matrix<int>::eye(electrodes->count, cudaStream);
+        auto measurementPattern = numeric::Matrix<int>::eye(electrodes->count, cudaStream);
 
         // create source
-        auto source = std::make_shared<FEM::SourceDescriptor<dtype::real>>(
-            FEM::SourceDescriptor<dtype::real>::Type::Fixed, 1.0, electrodes,
+        auto source = std::make_shared<FEM::SourceDescriptor<float>>(
+            FEM::SourceDescriptor<float>::Type::Fixed, 1.0, electrodes,
             drivePattern, measurementPattern, cudaStream);
 
         // create equation
@@ -73,7 +59,7 @@ int main(int argc, char* argv[]) {
         str::print("--------------------------");
         str::print("Create equation model class");
 
-        auto equation = std::make_shared<FEM::Equation<dtype::real, FEM::basis::Linear>>(
+        auto equation = std::make_shared<FEM::Equation<float, FEM::basis::Linear>>(
             mesh, electrodes, 1.0, cudaStream);
 
         cudaStreamSynchronize(cudaStream);
@@ -85,11 +71,11 @@ int main(int argc, char* argv[]) {
 
         auto forwardSolver = std::make_shared<EIT::ForwardSolver<numeric::BiCGSTAB>>(
             equation, source, 1, cublasHandle, cudaStream);
-        auto gamma = std::make_shared<numeric::Matrix<dtype::real>>(mesh->elements->rows, 1,
+        auto gamma = std::make_shared<numeric::Matrix<float>>(mesh->elements.rows(), 1,
             cudaStream);
 
         time.restart();
-        dtype::index steps = 0;
+        unsigned steps = 0;
         forwardSolver->solve(gamma, cublasHandle, cudaStream, 1e-9, &steps);
 
         cudaStreamSynchronize(cudaStream);
