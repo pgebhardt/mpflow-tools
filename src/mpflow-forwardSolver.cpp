@@ -240,7 +240,7 @@ int main(int argc, char* argv[]) {
 
     str::print("----------------------------------------------------");
     str::print("Result:");
-    result->savetxt(&std::cout);
+    str::print(*result);
     result->savetxt(str::format("%s/result.txt")(path));
 
     // save potential to file
