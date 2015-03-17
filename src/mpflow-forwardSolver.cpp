@@ -110,9 +110,8 @@ int main(int argc, char* argv[]) {
         auto nodes = numeric::Matrix<double>::loadtxt(str::format("%s/nodes.txt")(meshPath), cudaStream);
         auto elements = numeric::Matrix<int>::loadtxt(str::format("%s/elements.txt")(meshPath), cudaStream);
         auto boundary = numeric::Matrix<int>::loadtxt(str::format("%s/boundary.txt")(meshPath), cudaStream);
-        mesh = std::make_shared<numeric::IrregularMesh>(
-            numeric::matrix::toEigen<double>(nodes), numeric::matrix::toEigen<int>(elements),
-            numeric::matrix::toEigen<int>(boundary), radius, (double)meshConfig["height"]);
+        mesh = std::make_shared<numeric::IrregularMesh>(nodes->toEigen(), elements->toEigen(),
+            boundary->toEigen(), radius, (double)meshConfig["height"]);
 
         str::print("Mesh loaded with", nodes->rows, "nodes and", elements->rows, "elements");
         str::print("Time:", time.elapsed() * 1e3, "ms");
@@ -210,7 +209,7 @@ int main(int argc, char* argv[]) {
     str::print("Solve electrical potential for all excitations");
 
     // use different numeric solver for different source types
-    std::shared_ptr<numeric::Matrix<dataType>> result = nullptr, potential = nullptr;
+    std::shared_ptr<numeric::Matrix<dataType> const> result = nullptr, potential = nullptr;
     unsigned steps = 0;
     if (sourceType == FEM::SourceDescriptor<dataType>::Type::Fixed) {
         auto forwardSolver = std::make_shared<EIT::ForwardSolver<numeric::BiCGSTAB, decltype(equation)::element_type>>(
