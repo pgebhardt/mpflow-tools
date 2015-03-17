@@ -111,8 +111,8 @@ int main(int argc, char* argv[]) {
         auto elements = numeric::Matrix<int>::loadtxt(str::format("%s/elements.txt")(meshPath), cudaStream);
         auto boundary = numeric::Matrix<int>::loadtxt(str::format("%s/boundary.txt")(meshPath), cudaStream);
         mesh = std::make_shared<numeric::IrregularMesh>(
-            numeric::matrix::toEigen(nodes), numeric::matrix::toEigen(elements),
-            numeric::matrix::toEigen(boundary), radius, (double)meshConfig["height"]);
+            numeric::matrix::toEigen<double>(nodes), numeric::matrix::toEigen<int>(elements),
+            numeric::matrix::toEigen<int>(boundary), radius, (double)meshConfig["height"]);
 
         str::print("Mesh loaded with", nodes->rows, "nodes and", elements->rows, "elements");
         str::print("Time:", time.elapsed() * 1e3, "ms");
@@ -123,10 +123,8 @@ int main(int argc, char* argv[]) {
         // fix mesh at electrodes boundaries
         Eigen::ArrayXXd fixedPoints(electrodes->count * 2, 2);
         for (unsigned electrode = 0; electrode < electrodes->count; ++electrode) {
-            fixedPoints(electrode * 2, 0) = std::get<0>(std::get<0>(electrodes->coordinates[electrode]));
-            fixedPoints(electrode * 2, 1) = std::get<1>(std::get<0>(electrodes->coordinates[electrode]));
-            fixedPoints(electrode * 2 + 1, 0) = std::get<0>(std::get<1>(electrodes->coordinates[electrode]));
-            fixedPoints(electrode * 2 + 1, 1) = std::get<1>(std::get<1>(electrodes->coordinates[electrode]));
+            fixedPoints.block(electrode * 2, 0, 1, 2) = electrodes->coordinates.block(electrode, 0, 1, 2);
+            fixedPoints.block(electrode * 2 + 1, 0, 1, 2) = electrodes->coordinates.block(electrode, 2, 1, 2);
         }
 
         // create mesh with libdistmesh
