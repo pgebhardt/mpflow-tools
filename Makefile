@@ -42,12 +42,8 @@ endif
 # Compiler
 ##############################
 AR := ar rcs
-CXX ?= /usr/bin/g++
-
-# use of custom compiler
-ifdef CUSTOM_CXX
-	CXX := $(CUSTOM_CXX)
-endif
+CC ?= gcc
+CXX ?= g++
 
 # Target build architecture
 TARGET_ARCH_NAME ?= $(shell $(CXX) -dumpmachine)
@@ -64,7 +60,7 @@ endif
 ##############################
 LIBRARIES := mpflow_static distmesh_static qhullstatic cudart_static cublas_static culibos pthread dl
 LIBRARY_DIRS +=
-INCLUDE_DIRS += $(CUDA_DIR)/include ./utils/include
+INCLUDE_DIRS += $(CUDA_DIR)/include ./utils/include ./utils/stringtools/include ./utils/json-parser
 
 # link aganinst librt, only if it exists
 ifeq ($(shell echo "int main() {}" | $(CXX) -o /dev/null -x c - -lrt 2>&1),)
@@ -81,8 +77,9 @@ endif
 ##############################
 # Compiler Flags
 ##############################
-COMMON_FLAGS := $(addprefix -I, $(INCLUDE_DIRS))
-CXXFLAGS := -std=c++11 -fPIC
+COMMON_FLAGS := $(addprefix -I, $(INCLUDE_DIRS)) -fPIC
+CFLAGS :=
+CXXFLAGS := -std=c++11
 LINKFLAGS := -fPIC -static-libstdc++
 LDFLAGS := $(addprefix -l, $(LIBRARIES)) $(addprefix -L, $(LIBRARY_DIRS)) $(addprefix -Xlinker -rpath , $(LIBRARY_DIRS))
 
@@ -102,11 +99,12 @@ endif
 # Source Files
 ##############################
 CXX_SRCS := $(shell find src -name "*.cpp")
-UTILS_SRCS := $(shell find utils/src -name "*.cpp")
+UTILS_SRCS :=  $(shell find utils/src -name "*.cpp") utils/json-parser/json.c
 
 # Object files
 CXX_OBJS := $(addprefix $(BUILD_DIR)/objs/, $(CXX_SRCS:.cpp=.o))
-UTILS_OBJS := $(addprefix $(BUILD_DIR)/objs/, $(UTILS_SRCS:.cpp=.o))
+UTILS_OBJS := $(addprefix $(BUILD_DIR)/objs/, $(UTILS_SRCS:.c=.o))
+UTILS_OBJS := $(UTILS_OBJS:.cpp=.o)
 BINS := $(patsubst src%.cpp, $(BUILD_DIR)/bin%, $(CXX_SRCS))
 
 ##############################
@@ -120,6 +118,11 @@ $(BINS): $(BUILD_DIR)/bin/% : $(BUILD_DIR)/objs/src/%.o $(UTILS_OBJS)
 	@echo [ Linking ] $@
 	@mkdir -p $(BUILD_DIR)/bin
 	@$(CXX) -o $@ $< $(UTILS_OBJS) $(COMMON_FLAGS) $(LDFLAGS) $(LINKFLAGS)
+
+$(BUILD_DIR)/objs/%.o: %.c
+	@echo [ CC ] $<
+	@$(foreach d, $(subst /, ,${@D}), mkdir -p $d && cd $d && ):
+	@$(CC) $(CFLAGS) $(COMMON_FLAGS) -c -o $@ $<
 
 $(BUILD_DIR)/objs/%.o: %.cpp
 	@echo [ CXX ] $<
