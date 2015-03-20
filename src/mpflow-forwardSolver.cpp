@@ -55,23 +55,24 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
 
-    // load mesh from config
-    time.restart();
-    str::print("----------------------------------------------------");
-
-    auto mesh = createMeshFromConfig(modelConfig, path);
-
-    str::print("Mesh loaded with", mesh->nodes.rows(), "nodes and", mesh->elements.rows(), "elements");
-    str::print("Time:", time.elapsed() * 1e3, "ms");
-
     // Create model helper classes
     time.restart();
     str::print("----------------------------------------------------");
     str::print("Create model helper classes");
 
-    auto source = createSourceFromConfig<dataType>(modelConfig, cudaStream);
+    auto electrodes = createBoundaryDescriptorFromConfig(modelConfig["electrodes"], modelConfig["mesh"]["radius"].u.dbl);
+    auto source = createSourceFromConfig<dataType>(modelConfig["source"], electrodes, cudaStream);
 
     cudaStreamSynchronize(cudaStream);
+    str::print("Time:", time.elapsed() * 1e3, "ms");
+
+    // load mesh from config
+    time.restart();
+    str::print("----------------------------------------------------");
+
+    auto mesh = createMeshFromConfig(modelConfig["mesh"], path, electrodes);
+
+    str::print("Mesh loaded with", mesh->nodes.rows(), "nodes and", mesh->elements.rows(), "elements");
     str::print("Time:", time.elapsed() * 1e3, "ms");
 
     // Create main model class

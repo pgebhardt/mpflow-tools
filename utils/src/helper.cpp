@@ -1,5 +1,6 @@
 #include <mpflow/mpflow.h>
 #include <distmesh/distmesh.h>
+#include <sys/stat.h>
 #include "stringtools/format.hpp"
 #include "json.h"
 #include "helper.h"
@@ -32,23 +33,28 @@ std::shared_ptr<mpFlow::numeric::Matrix<dataType>> matrixFromJsonArray(
     return matrix;
 }
 
+// helper function to create boundaryDescriptor from config file
+std::shared_ptr<mpFlow::FEM::BoundaryDescriptor> createBoundaryDescriptorFromConfig(
+    json_value const& config, double const modelRadius) {
+    // create boundaryDescriptor from config to fix mesh nodes to boundary nodes
+    return mpFlow::FEM::boundaryDescriptor::circularBoundary(
+        config["count"].u.integer, std::make_tuple(config["width"].u.dbl, config["height"].u.dbl),
+        modelRadius, config["offset"].u.dbl);
+}
+
 // helper to initialize mesh from config file
 std::shared_ptr<mpFlow::numeric::IrregularMesh> createMeshFromConfig(
-    json_value const& config, std::string const path) {
+    json_value const& config, std::string const path,
+    std::shared_ptr<mpFlow::FEM::BoundaryDescriptor const> const boundaryDescriptor) {
     std::shared_ptr<mpFlow::numeric::IrregularMesh> mesh = nullptr;
 
     // extract basic mesh parameter
-    double radius = config["mesh"]["radius"];
-    double height = config["mesh"]["height"];
+    double radius = config["radius"];
+    double height = config["height"];
 
-    // create boundaryDescriptor from config to fix mesh nodes to boundary nodes
-    auto boundaryDescriptor = mpFlow::FEM::boundaryDescriptor::circularBoundary(config["electrodes"]["count"].u.integer,
-        std::make_tuple(config["electrodes"]["width"].u.dbl, config["electrodes"]["height"].u.dbl),
-        radius, config["electrodes"]["offset"].u.dbl);
-
-    if (config["mesh"]["meshPath"].type != json_none) {
+    if (config["meshPath"].type != json_none) {
         // load mesh from file
-        std::string meshPath = str::format("%s/%s")(path, std::string(config["mesh"]["meshPath"]));
+        std::string meshPath = str::format("%s/%s")(path, std::string(config["meshPath"]));
 
         auto nodes = mpFlow::numeric::Matrix<double>::loadtxt(str::format("%s/nodes.txt")(meshPath), nullptr);
         auto elements = mpFlow::numeric::Matrix<int>::loadtxt(str::format("%s/elements.txt")(meshPath), nullptr);
@@ -66,8 +72,8 @@ std::shared_ptr<mpFlow::numeric::IrregularMesh> createMeshFromConfig(
 
         // create mesh with libdistmesh
         auto distanceFuntion = distmesh::distance_function::circular(radius);
-        auto dist_mesh = distmesh::distmesh(distanceFuntion, config["mesh"]["outerEdgeLength"],
-            1.0 + (1.0 - (double)config["mesh"]["innerEdgeLength"] / (double)config["mesh"]["outerEdgeLength"]) *
+        auto dist_mesh = distmesh::distmesh(distanceFuntion, config["outerEdgeLength"],
+            1.0 + (1.0 - (double)config["innerEdgeLength"] / (double)config["outerEdgeLength"]) *
             distanceFuntion / radius, 1.1 * radius * distmesh::bounding_box(2), fixedPoints);
 
         // create mpflow matrix objects from distmesh arrays
@@ -75,6 +81,7 @@ std::shared_ptr<mpFlow::numeric::IrregularMesh> createMeshFromConfig(
             distmesh::boundedges(std::get<1>(dist_mesh)), radius, height);
 
         // save mesh to files for later usage
+        mkdir(str::format("%s/mesh")(path).c_str(), 0777);
         mpFlow::numeric::Matrix<double>::fromEigen(mesh->nodes, nullptr)->savetxt(str::format("%s/mesh/nodes.txt")(path));
         mpFlow::numeric::Matrix<int>::fromEigen(mesh->elements, nullptr)->savetxt(str::format("%s/mesh/elements.txt")(path));
         mpFlow::numeric::Matrix<int>::fromEigen(mesh->boundary, nullptr)->savetxt(str::format("%s/mesh/boundary.txt")(path));
@@ -86,55 +93,52 @@ std::shared_ptr<mpFlow::numeric::IrregularMesh> createMeshFromConfig(
 // helper to create source descriptor from config file
 template <class dataType>
 std::shared_ptr<mpFlow::FEM::SourceDescriptor<dataType>> createSourceFromConfig(
-    json_value const& config, cudaStream_t const cudaStream) {
-    // create electrodes descriptor
-    auto electrodes = mpFlow::FEM::boundaryDescriptor::circularBoundary(config["electrodes"]["count"].u.integer,
-        std::make_tuple(config["electrodes"]["width"].u.dbl, config["electrodes"]["height"].u.dbl),
-        config["mesh"]["radius"].u.dbl, config["electrodes"]["offset"].u.dbl);
-
+    json_value const& config,
+    std::shared_ptr<mpFlow::FEM::BoundaryDescriptor const> const boundaryDescriptor,
+    cudaStream_t const cudaStream) {
     // load excitation and measurement pattern from config or assume standard pattern, if not given
     std::shared_ptr<mpFlow::numeric::Matrix<int>> drivePattern = nullptr;
-    if (config["source"]["drivePattern"].type != json_none) {
-        drivePattern = matrixFromJsonArray<int>(config["source"]["drivePattern"], cudaStream);
+    if (config["drivePattern"].type != json_none) {
+        drivePattern = matrixFromJsonArray<int>(config["drivePattern"], cudaStream);
     }
     else {
-        drivePattern = mpFlow::numeric::Matrix<int>::eye(electrodes->count, cudaStream);
+        drivePattern = mpFlow::numeric::Matrix<int>::eye(boundaryDescriptor->count, cudaStream);
     }
 
     std::shared_ptr<mpFlow::numeric::Matrix<int>> measurementPattern = nullptr;
-    if (config["source"]["measurementPattern"].type != json_none) {
-        measurementPattern = matrixFromJsonArray<int>(config["source"]["measurementPattern"], cudaStream);
+    if (config["measurementPattern"].type != json_none) {
+        measurementPattern = matrixFromJsonArray<int>(config["measurementPattern"], cudaStream);
     }
     else {
-        measurementPattern = mpFlow::numeric::Matrix<int>::eye(electrodes->count, cudaStream);
+        measurementPattern = mpFlow::numeric::Matrix<int>::eye(boundaryDescriptor->count, cudaStream);
     }
 
     // read out currents
     std::vector<dataType> excitation(drivePattern->cols);
-    if (config["source"]["value"].type == json_array) {
+    if (config["value"].type == json_array) {
         for (unsigned i = 0; i < drivePattern->cols; ++i) {
-            excitation[i] = config["source"]["value"][i].u.dbl;
+            excitation[i] = config["value"][i].u.dbl;
         }
     }
     else {
-        excitation = std::vector<dataType>(drivePattern->cols, config["source"]["value"].u.dbl);
+        excitation = std::vector<dataType>(drivePattern->cols, config["value"].u.dbl);
     }
 
     // create source descriptor
-    auto sourceType = std::string(config["source"]["type"]) == "voltage" ?
+    auto sourceType = std::string(config["type"]) == "voltage" ?
         mpFlow::FEM::SourceDescriptor<dataType>::Type::Fixed :
         mpFlow::FEM::SourceDescriptor<dataType>::Type::Open;
     auto source = std::make_shared<mpFlow::FEM::SourceDescriptor<dataType>>(sourceType,
-        excitation, electrodes, drivePattern, measurementPattern, cudaStream);
+        excitation, boundaryDescriptor, drivePattern, measurementPattern, cudaStream);
 
     return source;
 }
 
 template std::shared_ptr<mpFlow::FEM::SourceDescriptor<float>> createSourceFromConfig(
-    json_value const&, cudaStream_t const);
+    json_value const&, std::shared_ptr<mpFlow::FEM::BoundaryDescriptor const> const, cudaStream_t const);
 template std::shared_ptr<mpFlow::FEM::SourceDescriptor<double>> createSourceFromConfig(
-    json_value const&, cudaStream_t const);
+    json_value const&, std::shared_ptr<mpFlow::FEM::BoundaryDescriptor const> const, cudaStream_t const);
 template std::shared_ptr<mpFlow::FEM::SourceDescriptor<thrust::complex<float>>> createSourceFromConfig(
-    json_value const&, cudaStream_t const);
+    json_value const&, std::shared_ptr<mpFlow::FEM::BoundaryDescriptor const> const, cudaStream_t const);
 template std::shared_ptr<mpFlow::FEM::SourceDescriptor<thrust::complex<double>>> createSourceFromConfig(
-    json_value const&, cudaStream_t const);
+    json_value const&, std::shared_ptr<mpFlow::FEM::BoundaryDescriptor const> const, cudaStream_t const);

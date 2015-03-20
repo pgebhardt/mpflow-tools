@@ -9,6 +9,9 @@ using namespace mpFlow;
 int main(int argc, char* argv[]) {
     HighPrecisionTime time;
 
+    // extrac maximum pipeline length
+    int const maxPipelineLenght = argc > 1 ? atoi(argv[1]) : 512;
+
     // print out mpFlow version for refernce
     str::print("mpFlow version:", version::getVersionString());
 
@@ -72,12 +75,6 @@ int main(int argc, char* argv[]) {
     cudaStreamSynchronize(cudaStream);
     str::print("Time:", time.elapsed() * 1e3, "ms");
 
-    // benchmark different pipeline lengths
-    std::array<unsigned, 512> pipelineLengths;
-    for (unsigned i = 0; i < pipelineLengths.size(); ++i) {
-        pipelineLengths[i] = i + 1;
-    }
-
     // Create solver class
     time.restart();
     str::print("----------------------------------------------------");
@@ -102,10 +99,10 @@ int main(int argc, char* argv[]) {
     str::print("----------------------------------------------------");
     str::print("Reconstruct images for different pipeline lengths:\n");
 
-    for (const auto& pipelineLength : pipelineLengths) {
+    for (unsigned length = 1; length <= maxPipelineLenght; ++length) {
         // create inverse solver
         solver = std::make_shared<EIT::Solver<numeric::ConjugateGradient>>(
-            equation, source, 7, pipelineLength, 0.0, cublasHandle, cudaStream);
+            equation, source, 7, length, 0.0, cublasHandle, cudaStream);
 
         cudaStreamSynchronize(cudaStream);
         time.restart();
@@ -115,9 +112,9 @@ int main(int argc, char* argv[]) {
         }
 
         cudaStreamSynchronize(cudaStream);
-        str::print("pipeline length:", pipelineLength, "; time:",
+        str::print("pipeline length:", length, "; time:",
             time.elapsed() / 10.0 * 1e3, "ms ; fps:",
-            (double)pipelineLength / (time.elapsed() / 10.0));
+            (double)length / (time.elapsed() / 10.0));
     }
 
     return EXIT_SUCCESS;
