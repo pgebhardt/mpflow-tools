@@ -107,7 +107,7 @@ int main(int argc, char* argv[]) {
             equation, source, modelConfig["componentsCount"].u.integer, cublasHandle, cudaStream);
 
         time.restart();
-        result = forwardSolver->solve(gamma, cublasHandle, cudaStream, 1e-15, &steps);
+        result = forwardSolver->solve(gamma, cublasHandle, cudaStream, 1e-10, &steps);
         potential = forwardSolver->phi[0];
     }
     else {
@@ -115,7 +115,7 @@ int main(int argc, char* argv[]) {
             equation, source, modelConfig["componentsCount"].u.integer, cublasHandle, cudaStream);
 
         time.restart();
-        result = forwardSolver->solve(gamma, cublasHandle, cudaStream, 1e-15, &steps);
+        result = forwardSolver->solve(gamma, cublasHandle, cudaStream, 1e-10, &steps);
         potential = forwardSolver->phi[0];
     }
 

@@ -73,6 +73,11 @@ std::shared_ptr<mpFlow::numeric::IrregularMesh> createMeshFromConfig(
         // create mpflow matrix objects from distmesh arrays
         mesh = std::make_shared<mpFlow::numeric::IrregularMesh>(std::get<0>(dist_mesh), std::get<1>(dist_mesh),
             distmesh::boundedges(std::get<1>(dist_mesh)), radius, height);
+
+        // save mesh to files for later usage
+        mpFlow::numeric::Matrix<double>::fromEigen(mesh->nodes, nullptr)->savetxt(str::format("%s/mesh/nodes.txt")(path));
+        mpFlow::numeric::Matrix<int>::fromEigen(mesh->elements, nullptr)->savetxt(str::format("%s/mesh/elements.txt")(path));
+        mpFlow::numeric::Matrix<int>::fromEigen(mesh->boundary, nullptr)->savetxt(str::format("%s/mesh/boundary.txt")(path));
     }
 
     return mesh;
