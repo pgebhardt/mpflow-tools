@@ -43,7 +43,7 @@ int main(int argc, char* argv[]) {
     str::print("----------------------------------------------------");
     str::print("Create mesh using libdistmesh with uniform grid size");
 
-    auto dist_mesh = distmesh::distmesh(distmesh::distance_function::circular(RADIUS),
+    auto dist_mesh = distmesh::distmesh(distmesh::distanceFunction::circular(RADIUS),
         0.006, 1.0, RADIUS * 1.1 * distmesh::boundingBox(2));
     auto boundary = distmesh::boundEdges(std::get<1>(dist_mesh));
 

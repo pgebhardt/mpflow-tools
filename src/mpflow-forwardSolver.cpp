@@ -55,6 +55,12 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
 
+    // load initial values, if given
+    std::shared_ptr<numeric::Matrix<dataType>> initialValue = nullptr;
+    if (argc > 2) {
+        initialValue = numeric::Matrix<dataType>::loadtxt(argv[2], cudaStream);
+    }
+
     // Create model helper classes
     time.restart();
     str::print("----------------------------------------------------");
@@ -107,6 +113,10 @@ int main(int argc, char* argv[]) {
         auto forwardSolver = std::make_shared<EIT::ForwardSolver<numeric::BiCGSTAB, decltype(equation)::element_type>>(
             equation, source, modelConfig["componentsCount"].u.integer, cublasHandle, cudaStream);
 
+        if (initialValue != nullptr) {
+            forwardSolver->phi[0]->copy(initialValue, cudaStream);
+        }
+
         time.restart();
         result = forwardSolver->solve(gamma, cublasHandle, cudaStream, 1e-10, &steps);
         potential = forwardSolver->phi[0];
@@ -114,6 +124,10 @@ int main(int argc, char* argv[]) {
     else {
         auto forwardSolver = std::make_shared<EIT::ForwardSolver<numeric::ConjugateGradient, decltype(equation)::element_type>>(
             equation, source, modelConfig["componentsCount"].u.integer, cublasHandle, cudaStream);
+
+        if (initialValue != nullptr) {
+            forwardSolver->phi[0]->copy(initialValue, cudaStream);
+        }
 
         time.restart();
         result = forwardSolver->solve(gamma, cublasHandle, cudaStream, 1e-10, &steps);

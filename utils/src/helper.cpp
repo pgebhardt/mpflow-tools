@@ -71,7 +71,7 @@ std::shared_ptr<mpFlow::numeric::IrregularMesh> createMeshFromConfig(
         }
 
         // create mesh with libdistmesh
-        auto distanceFuntion = distmesh::distance_function::circular(radius);
+        auto distanceFuntion = distmesh::distanceFunction::circular(radius);
         auto dist_mesh = distmesh::distmesh(distanceFuntion, config["outerEdgeLength"],
             1.0 + (1.0 - (double)config["innerEdgeLength"] / (double)config["outerEdgeLength"]) *
             distanceFuntion / radius, 1.1 * radius * distmesh::boundingBox(2), fixedPoints);
