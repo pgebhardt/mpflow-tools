@@ -27,8 +27,8 @@ int main(int argc, char* argv[]) {
         str::print("Create mesh with density:", density);
 
         auto dist_mesh = distmesh::distmesh(distmesh::distance_function::circular(1.0),
-            density, 1.0, 1.1 * distmesh::bounding_box(2));
-        auto boundary = distmesh::boundedges(std::get<1>(dist_mesh));
+            density, 1.0, 1.1 * distmesh::boundingBox(2));
+        auto boundary = distmesh::boundEdges(std::get<1>(dist_mesh));
 
         str::print("Mesh created with", std::get<0>(dist_mesh).rows(), "nodes and",
             std::get<1>(dist_mesh).rows(), "element(s)");

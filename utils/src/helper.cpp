@@ -74,11 +74,11 @@ std::shared_ptr<mpFlow::numeric::IrregularMesh> createMeshFromConfig(
         auto distanceFuntion = distmesh::distance_function::circular(radius);
         auto dist_mesh = distmesh::distmesh(distanceFuntion, config["outerEdgeLength"],
             1.0 + (1.0 - (double)config["innerEdgeLength"] / (double)config["outerEdgeLength"]) *
-            distanceFuntion / radius, 1.1 * radius * distmesh::bounding_box(2), fixedPoints);
+            distanceFuntion / radius, 1.1 * radius * distmesh::boundingBox(2), fixedPoints);
 
         // create mpflow matrix objects from distmesh arrays
         mesh = std::make_shared<mpFlow::numeric::IrregularMesh>(std::get<0>(dist_mesh), std::get<1>(dist_mesh),
-            distmesh::boundedges(std::get<1>(dist_mesh)), radius, height);
+            distmesh::boundEdges(std::get<1>(dist_mesh)), radius, height);
 
         // save mesh to files for later usage
         mkdir(str::format("%s/mesh")(path).c_str(), 0777);
