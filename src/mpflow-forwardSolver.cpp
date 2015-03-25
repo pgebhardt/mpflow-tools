@@ -107,8 +107,12 @@ int main(int argc, char* argv[]) {
         auto forwardSolver = std::make_shared<EIT::ForwardSolver<numeric::BiCGSTAB, decltype(equation)::element_type>>(
             equation, source, modelConfig["componentsCount"].u.integer, cublasHandle, cudaStream);
 
+        for (auto phi : forwardSolver->phi) {
+            phi->fill(1.0, cudaStream);
+        }
+
         time.restart();
-        result = forwardSolver->solve(gamma, cublasHandle, cudaStream, 1e-10, &steps);
+        result = forwardSolver->solve(gamma, cublasHandle, cudaStream, 1e-15, &steps);
         potential = forwardSolver->phi[0];
     }
     else {
@@ -116,7 +120,7 @@ int main(int argc, char* argv[]) {
             equation, source, modelConfig["componentsCount"].u.integer, cublasHandle, cudaStream);
 
         time.restart();
-        result = forwardSolver->solve(gamma, cublasHandle, cudaStream, 1e-10, &steps);
+        result = forwardSolver->solve(gamma, cublasHandle, cudaStream, 1e-15, &steps);
         potential = forwardSolver->phi[0];
     }
 
