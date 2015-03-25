@@ -76,7 +76,7 @@ int main(int argc, char* argv[]) {
 
         time.restart();
         unsigned steps = 0;
-        forwardSolver->solve(gamma, cublasHandle, cudaStream, 1e-9, &steps);
+        forwardSolver->solve(gamma, cublasHandle, cudaStream, &steps);
 
         cudaStreamSynchronize(cudaStream);
         str::print("Time:", time.elapsed() * 1e3, "ms, Steps:", steps);

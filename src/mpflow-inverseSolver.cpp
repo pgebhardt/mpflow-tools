@@ -118,10 +118,11 @@ int main(int argc, char* argv[]) {
 
     // use different numeric solver for different source types
     std::shared_ptr<numeric::Matrix<dataType> const> result = nullptr;
+    unsigned steps = 0;
     if (source->type == FEM::SourceDescriptor<dataType>::Type::Fixed) {
         auto solver = std::make_shared<EIT::Solver<numeric::BiCGSTAB, decltype(equation)::element_type>>(
             equation, source, modelConfig["componentsCount"].u.integer,
-            1, modelConfig["regularizationFactor"].u.dbl, cublasHandle, cudaStream);
+            1, solverConfig["regularizationFactor"].u.dbl, cublasHandle, cudaStream);
 
         // set loaded gamma distribution
         solver->gamma->copy(gamma, cudaStream);
@@ -134,12 +135,12 @@ int main(int argc, char* argv[]) {
         cudaStreamSynchronize(cudaStream);
         time.restart();
 
-        result = solver->solveDifferential(cublasHandle, cudaStream);
+        result = solver->solveDifferential(cublasHandle, cudaStream, 0, &steps);
     }
     else {
         auto solver = std::make_shared<EIT::Solver<numeric::ConjugateGradient, decltype(equation)::element_type>>(
             equation, source, modelConfig["componentsCount"].u.integer,
-            1, modelConfig["regularizationFactor"].u.dbl, cublasHandle, cudaStream);
+            1, solverConfig["regularizationFactor"].u.dbl, cublasHandle, cudaStream);
 
         // set loaded gamma distribution
         solver->gamma->copy(gamma, cudaStream);
@@ -152,11 +153,11 @@ int main(int argc, char* argv[]) {
         cudaStreamSynchronize(cudaStream);
         time.restart();
 
-        result = solver->solveDifferential(cublasHandle, cudaStream);
+        result = solver->solveDifferential(cublasHandle, cudaStream, 0, &steps);
     }
 
     cudaStreamSynchronize(cudaStream);
-    str::print("Time:", time.elapsed() * 1e3, "ms");
+    str::print("Time:", time.elapsed() * 1e3, "ms, Steps:", steps);
 
     // Save results
     result->copyToHost(cudaStream);

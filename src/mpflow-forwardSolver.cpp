@@ -112,7 +112,7 @@ int main(int argc, char* argv[]) {
         }
 
         time.restart();
-        result = forwardSolver->solve(gamma, cublasHandle, cudaStream, 1e-15, &steps);
+        result = forwardSolver->solve(gamma, cublasHandle, cudaStream, &steps);
         potential = forwardSolver->phi[0];
     }
     else {
@@ -120,12 +120,13 @@ int main(int argc, char* argv[]) {
             equation, source, modelConfig["componentsCount"].u.integer, cublasHandle, cudaStream);
 
         time.restart();
-        result = forwardSolver->solve(gamma, cublasHandle, cudaStream, 1e-15, &steps);
+        result = forwardSolver->solve(gamma, cublasHandle, cudaStream, &steps);
         potential = forwardSolver->phi[0];
     }
 
     cudaStreamSynchronize(cudaStream);
-    str::print("Time:", time.elapsed() * 1e3, "ms, Steps:", steps);
+    str::print("Time:", time.elapsed() * 1e3, "ms, Steps:", steps, ", Tolerance:",
+        std::numeric_limits<typename typeTraits::extractNumericalType<dataType>::type>::epsilon());
 
     // Print result and save results
     result->copyToHost(cudaStream);
