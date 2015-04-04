@@ -22,4 +22,7 @@ std::shared_ptr<mpFlow::FEM::SourceDescriptor<dataType>> createSourceFromConfig(
     std::shared_ptr<mpFlow::FEM::BoundaryDescriptor const> const boundaryDescriptor,
     cudaStream_t const cudaStream);
 
+// print properties of current cuda device
+void printCudaDeviceProperties();
+
 #endif

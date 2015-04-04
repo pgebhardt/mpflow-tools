@@ -14,8 +14,14 @@ using namespace mpFlow;
 int main(int argc, char* argv[]) {
     HighPrecisionTime time;
 
-    // print out mpFlow version for refernce
+    // print out basic system info for reference
+    str::print("----------------------------------------------------");
     str::print("mpFlow version:", version::getVersionString());
+
+    // print out basic cuda info for reference
+    str::print("----------------------------------------------------");
+    str::print("CUDA Device Info:");
+    printCudaDeviceProperties();
 
     // init cuda
     cudaStream_t cudaStream = nullptr;
