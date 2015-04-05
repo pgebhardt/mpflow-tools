@@ -22,17 +22,13 @@ int main(int argc, char* argv[]) {
 
     // print out basic system info for reference
     str::print("----------------------------------------------------");
-    str::print("mpFlow-forwardSolver");
-    str::print("Config file:", argv[1]);
+    str::print("mpFlow", version::getVersionString(),
+        str::format("(%s %s)")(__DATE__, __TIME__));
+    str::print(str::format("[%s] on %s")(getCompilerName(), _TARGET_ARCH_NAME_));
     str::print("----------------------------------------------------");
-    str::print("mpFlow Version:", version::getVersionString());
-    str::print("Compiler:", getCompilerName());
-    str::print("Build At:", __DATE__, __TIME__);
-
-    // print out basic cuda info for reference
-    str::print("----------------------------------------------------");
-    str::print("CUDA Device Info:");
     printCudaDeviceProperties();
+    str::print("----------------------------------------------------");
+    str::print("Config file:", argv[1]);
 
     // init cuda
     cudaStream_t cudaStream = nullptr;
@@ -43,15 +39,15 @@ int main(int argc, char* argv[]) {
     cudaStreamCreate(&cudaStream);
 
     // extract filename and its path from command line arguments
-    std::string filename = argv[1];
-    auto filenamePos = filename.find_last_of("/");
-    std::string path = filenamePos == std::string::npos ? "./" : filename.substr(0, filenamePos);
+    std::string const filename = argv[1];
+    std::string const path = filename.find_last_of("/") == std::string::npos ?
+        "./" : filename.substr(0, filename.find_last_of("/"));
 
     // load config from file
     std::ifstream file(filename);
-    std::string fileContent((std::istreambuf_iterator<char>(file)),
+    std::string const fileContent((std::istreambuf_iterator<char>(file)),
         std::istreambuf_iterator<char>());
-    auto config = json_parse(fileContent.c_str(), fileContent.length());
+    auto const config = json_parse(fileContent.c_str(), fileContent.length());
 
     // check for success
     if (config == nullptr) {
@@ -60,30 +56,31 @@ int main(int argc, char* argv[]) {
     }
 
     // extract model config
-    auto modelConfig = (*config)["model"];
+    auto const modelConfig = (*config)["model"];
     if (modelConfig.type == json_none) {
         str::print("Error: Invalid model config");
         return EXIT_FAILURE;
     }
 
     // Create model helper classes
-    auto electrodes = createBoundaryDescriptorFromConfig(modelConfig["electrodes"], modelConfig["mesh"]["radius"].u.dbl);
-    auto source = createSourceFromConfig<dataType>(modelConfig["source"], electrodes, cudaStream);
+    auto const electrodes = createBoundaryDescriptorFromConfig(modelConfig["electrodes"], modelConfig["mesh"]["radius"].u.dbl);
+    auto const source = createSourceFromConfig<dataType>(modelConfig["source"], electrodes, cudaStream);
 
     time.restart();
     str::print("----------------------------------------------------");
 
     // load mesh from config
-    auto mesh = createMeshFromConfig(modelConfig["mesh"], path, electrodes);
+    auto const mesh = createMeshFromConfig(modelConfig["mesh"], path, electrodes);
 
     // load predefined gamma distribution from file, if path is given
-    std::shared_ptr<numeric::Matrix<dataType>> gamma = nullptr;
-    if (modelConfig["gammaFile"].type != json_none) {
-        gamma = numeric::Matrix<dataType>::loadtxt(str::format("%s/%s")(path, std::string(modelConfig["gammaFile"])), cudaStream);
-    }
-    else {
-        gamma = std::make_shared<numeric::Matrix<dataType>>(mesh->elements.rows(), 1, cudaStream, dataType(1));
-    }
+    auto const gamma = [=](json_value const& gammaFile) {
+        if (gammaFile.type != json_none) {
+            return numeric::Matrix<dataType>::loadtxt(str::format("%s/%s")(path, std::string(gammaFile)), cudaStream);
+        }
+        else {
+            return std::make_shared<numeric::Matrix<dataType>>(mesh->elements.rows(), 1, cudaStream, dataType(1));
+        }
+    }(modelConfig["gammaFile"]);
 
     str::print("Mesh loaded with", mesh->nodes.rows(), "nodes and", mesh->elements.rows(), "elements");
     str::print("Time:", time.elapsed() * 1e3, "ms");
@@ -137,18 +134,15 @@ int main(int argc, char* argv[]) {
     str::print("Time:", time.elapsed() * 1e3, "ms, Steps:", steps, ", Tolerance:",
         std::numeric_limits<typename typeTraits::extractNumericalType<dataType>::type>::epsilon());
 
-    // Print result and save results
+    // Print and save results
     result->copyToHost(cudaStream);
+    potential->copyToHost(cudaStream);
     cudaStreamSynchronize(cudaStream);
 
     str::print("----------------------------------------------------");
     str::print("Result:");
     str::print(*result);
     result->savetxt(str::format("%s/result.txt")(path));
-
-    // save potential to file
-    potential->copyToHost(cudaStream);
-    cudaStreamSynchronize(cudaStream);
     potential->savetxt(str::format("%s/potential.txt")(path));
 
     // cleanup

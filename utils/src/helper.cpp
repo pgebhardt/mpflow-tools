@@ -200,10 +200,10 @@ void printCudaDeviceProperties() {
     cudaRuntimeGetVersion(&runtimeVersion);
 
     // print most important information about GPU
+    str::print("Device Name:", deviceProperties.name);
+
     str::print(str::format("CUDA Driver Version / Runtime Version: %d.%d / %d.%d")
         (driverVersion / 1000, (driverVersion % 100) / 10, runtimeVersion / 1000, (runtimeVersion % 100) / 10));
-
-    str::print("Device Name:", deviceProperties.name);
     str::print(str::format("CUDA Device Capabilities: %d.%d")
         (deviceProperties.major, deviceProperties.minor));
 
@@ -226,7 +226,7 @@ std::string getCompilerName() {
 #if defined(__clang__)
     return str::format("clang %s")(__clang_version__);
 #elif define(__GNUC__)
-    return str::format("%s")(__GNUC__);
+    return str::format("gcc %s")(__VERSION__);
 #else
     return "<unknown>";
 #endif

@@ -77,7 +77,7 @@ endif
 ##############################
 # Compiler Flags
 ##############################
-COMMON_FLAGS := $(addprefix -I, $(INCLUDE_DIRS)) -fPIC
+COMMON_FLAGS := $(addprefix -I, $(INCLUDE_DIRS)) -fPIC -D_TARGET_ARCH_NAME_=\"$(TARGET_ARCH_NAME)\"
 CFLAGS :=
 CXXFLAGS := -std=c++11
 LINKFLAGS := -fPIC -static-libstdc++
