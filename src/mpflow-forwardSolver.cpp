@@ -9,7 +9,7 @@
 using namespace mpFlow;
 
 // use complex or real data type
-#define dataType thrust::complex<double>
+#define dataType double
 
 int main(int argc, char* argv[]) {
     HighPrecisionTime time;
@@ -143,12 +143,7 @@ int main(int argc, char* argv[]) {
 
     str::print("----------------------------------------------------");
     str::print("Result:");
-    str::print("----------------------------------------------------");
-    str::print("Real Part:");
-    str::print(result->toEigen().real());
-    str::print("----------------------------------------------------");
-    str::print("Imaginary Part:");
-    str::print(result->toEigen().imag());
+    str::print(*result);
     result->savetxt(str::format("%s/result.txt")(path));
 
     // save potential to file
