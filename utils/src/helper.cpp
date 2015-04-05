@@ -200,18 +200,18 @@ void printCudaDeviceProperties() {
     cudaRuntimeGetVersion(&runtimeVersion);
 
     // print most important information about GPU
-    str::print("Name:", deviceProperties.name);
-
     str::print(str::format("CUDA Driver Version / Runtime Version: %d.%d / %d.%d")
         (driverVersion / 1000, (driverVersion % 100) / 10, runtimeVersion / 1000, (runtimeVersion % 100) / 10));
-    str::print(str::format("CUDA Capability Major / Minor version number: %d.%d")
+
+    str::print("Device Name:", deviceProperties.name);
+    str::print(str::format("CUDA Device Capabilities: %d.%d")
         (deviceProperties.major, deviceProperties.minor));
 
-    str::print(str::format("Total amount of global memory: %.0f MBytes (%llu bytes)")
-        ((float)deviceProperties.totalGlobalMem/1048576.0f, (unsigned long long)deviceProperties.totalGlobalMem));
     str::print(str::format("(%2d) Multiprocessors, (%3d) CUDA Cores/MP: %d CUDA Cores")
         (deviceProperties.multiProcessorCount, _ConvertSMVer2Cores(deviceProperties.major, deviceProperties.minor),
         _ConvertSMVer2Cores(deviceProperties.major, deviceProperties.minor) * deviceProperties.multiProcessorCount));
+    str::print(str::format("Total amount of global memory: %.0f MBytes (%llu bytes)")
+        ((float)deviceProperties.totalGlobalMem/1048576.0f, (unsigned long long)deviceProperties.totalGlobalMem));
     str::print(str::format("GPU Clock rate: %.0f MHz (%0.2f GHz)")
         (deviceProperties.clockRate * 1e-3, deviceProperties.clockRate * 1e-6));
 
@@ -219,4 +219,15 @@ void printCudaDeviceProperties() {
         (deviceProperties.memoryClockRate * 1e-3));
     str::print(str::format("Memory Bus width: %d-bit")
         (deviceProperties.memoryBusWidth));
+}
+
+// detects compiler name and version and returns a string representation
+std::string getCompilerName() {
+#if defined(__clang__)
+    return str::format("clang %s")(__clang_version__);
+#elif define(__GNUC__)
+    return str::format("%s")(__GNUC__);
+#else
+    return "<unknown>";
+#endif
 }

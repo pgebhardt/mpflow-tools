@@ -25,4 +25,7 @@ std::shared_ptr<mpFlow::FEM::SourceDescriptor<dataType>> createSourceFromConfig(
 // print properties of current cuda device
 void printCudaDeviceProperties();
 
+// get basic compiler name
+std::string getCompilerName();
+
 #endif
