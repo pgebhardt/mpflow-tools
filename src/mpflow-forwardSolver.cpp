@@ -115,16 +115,16 @@ int main(int argc, char* argv[]) {
     unsigned steps = 0;
     auto result = forwardSolver->solve(material, cublasHandle, cudaStream, &steps);
 
+    cudaStreamSynchronize(cudaStream);
+    str::print("Time:", time.elapsed() * 1e3, "ms");
+    str::print("Steps:", steps);
+
     // calculate electrical potential at cross section from 2.5D model
     auto potential = std::make_shared<numeric::Matrix<dataType>>(forwardSolver->phi[0]->rows,
         forwardSolver->phi[0]->cols, cudaStream);
     for (auto const phi : forwardSolver->phi) {
         potential->add(phi, cudaStream);
     }
-
-    cudaStreamSynchronize(cudaStream);
-    str::print("Time:", time.elapsed() * 1e3, "ms");
-    str::print("Steps:", steps);
 
     // Print and save results
     result->copyToHost(cudaStream);
