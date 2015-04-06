@@ -8,12 +8,89 @@
 
 using namespace mpFlow;
 
-// use complex or real data type
-#define dataType thrust::complex<double>
-
-int main(int argc, char* argv[]) {
+template <class dataType>
+void solveForwardModelFromConfig(json_value const& config, std::string const path,
+    cublasHandle_t const cublasHandle, cudaStream_t const cudaStream) {
     HighPrecisionTime time;
 
+    // Create model helper classes
+    auto const electrodes = createBoundaryDescriptorFromConfig(config["electrodes"], config["mesh"]["radius"].u.dbl);
+    auto const source = createSourceFromConfig<dataType>(config["source"], electrodes, cudaStream);
+
+    time.restart();
+    str::print("----------------------------------------------------");
+
+    // load mesh from config
+    auto const mesh = createMeshFromConfig(config["mesh"], path, electrodes);
+
+    // load predefined material distribution from file, if path is given
+    auto const material = [=](json_value const& materialFile) {
+        if (materialFile.type != json_none) {
+            return numeric::Matrix<dataType>::loadtxt(str::format("%s/%s")(path, std::string(materialFile)), cudaStream);
+        }
+        else {
+            return std::make_shared<numeric::Matrix<dataType>>(mesh->elements.rows(), 1, cudaStream, dataType(1));
+        }
+    }(config["gammaFile"]);
+
+    str::print("Mesh loaded with", mesh->nodes.rows(), "nodes and", mesh->elements.rows(), "elements");
+    str::print("Time:", time.elapsed() * 1e3, "ms");
+
+    str::print("----------------------------------------------------");
+    str::print("Initialize mpFlow forward solver");
+    time.restart();
+
+    // Create main model class
+    auto equation = std::make_shared<FEM::Equation<dataType, FEM::basis::Linear, false>>(
+        mesh, source->electrodes, config["referenceValue"].u.dbl, cudaStream);
+
+    // Create forward solver and solve potential
+    auto forwardSolver = std::make_shared<EIT::ForwardSolver<numeric::BiCGSTAB,
+        typename decltype(equation)::element_type>>(equation, source,
+        std::max(1, (int)config["componentsCount"].u.integer), cublasHandle, cudaStream);
+
+    // use override initial guess of potential for fixed sources to improve convergence
+    if (source->type == FEM::SourceDescriptor<dataType>::Type::Fixed) {
+        for (auto phi : forwardSolver->phi) {
+            phi->fill(dataType(1), cudaStream);
+        }
+    }
+
+    cudaStreamSynchronize(cudaStream);
+    str::print("Time:", time.elapsed() * 1e3, "ms");
+
+    str::print("----------------------------------------------------");
+    str::print("Solve electrical potential for all excitations");
+    time.restart();
+
+    // solve forward model
+    unsigned steps = 0;
+    auto result = forwardSolver->solve(material, cublasHandle, cudaStream, &steps);
+
+    cudaStreamSynchronize(cudaStream);
+    str::print("Time:", time.elapsed() * 1e3, "ms");
+    str::print("Steps:", steps);
+
+    // calculate electrical potential at cross section from 2.5D model
+    auto potential = std::make_shared<numeric::Matrix<dataType>>(forwardSolver->phi[0]->rows,
+        forwardSolver->phi[0]->cols, cudaStream);
+    for (auto const phi : forwardSolver->phi) {
+        potential->add(phi, cudaStream);
+    }
+
+    // Print and save results
+    result->copyToHost(cudaStream);
+    potential->copyToHost(cudaStream);
+    cudaStreamSynchronize(cudaStream);
+
+    str::print("----------------------------------------------------");
+    str::print("Result:");
+    str::print(*result);
+    result->savetxt(str::format("%s/result.txt")(path));
+    potential->savetxt(str::format("%s/potential.txt")(path));
+}
+
+int main(int argc, char* argv[]) {
     // check command line arguments
     if (argc <= 1) {
         str::print("You need to give a path to the model config");
@@ -62,80 +139,14 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
 
-    // Create model helper classes
-    auto const electrodes = createBoundaryDescriptorFromConfig(modelConfig["electrodes"], modelConfig["mesh"]["radius"].u.dbl);
-    auto const source = createSourceFromConfig<dataType>(modelConfig["source"], electrodes, cudaStream);
-
-    time.restart();
-    str::print("----------------------------------------------------");
-
-    // load mesh from config
-    auto const mesh = createMeshFromConfig(modelConfig["mesh"], path, electrodes);
-
-    // load predefined material distribution from file, if path is given
-    auto const material = [=](json_value const& materialFile) {
-        if (materialFile.type != json_none) {
-            return numeric::Matrix<dataType>::loadtxt(str::format("%s/%s")(path, std::string(materialFile)), cudaStream);
-        }
-        else {
-            return std::make_shared<numeric::Matrix<dataType>>(mesh->elements.rows(), 1, cudaStream, dataType(1));
-        }
-    }(modelConfig["gammaFile"]);
-
-    str::print("Mesh loaded with", mesh->nodes.rows(), "nodes and", mesh->elements.rows(), "elements");
-    str::print("Time:", time.elapsed() * 1e3, "ms");
-
-    str::print("----------------------------------------------------");
-    str::print("Initialize mpFlow forward solver");
-    time.restart();
-
-    // Create main model class
-    auto equation = std::make_shared<FEM::Equation<dataType, FEM::basis::Linear, false>>(
-        mesh, source->electrodes, modelConfig["referenceValue"].u.dbl, cudaStream);
-
-    // Create forward solver and solve potential
-    auto forwardSolver = std::make_shared<EIT::ForwardSolver<numeric::BiCGSTAB, decltype(equation)::element_type>>(
-        equation, source, modelConfig["componentsCount"].u.integer, cublasHandle, cudaStream);
-
-    // use override initial guess of potential for fixed sources to improve convergence
-    if (source->type == FEM::SourceDescriptor<dataType>::Type::Fixed) {
-        for (auto phi : forwardSolver->phi) {
-            phi->fill(dataType(1), cudaStream);
-        }
+    // extract data type from model config and solve forward model
+    if ((modelConfig["numericType"].type == json_none) ||
+        (std::string(modelConfig["numericType"]) == "real")) {
+        solveForwardModelFromConfig<double>(modelConfig, path, cublasHandle, cudaStream);
     }
-
-    cudaStreamSynchronize(cudaStream);
-    str::print("Time:", time.elapsed() * 1e3, "ms");
-
-    str::print("----------------------------------------------------");
-    str::print("Solve electrical potential for all excitations");
-    time.restart();
-
-    // solve forward model
-    unsigned steps = 0;
-    auto result = forwardSolver->solve(material, cublasHandle, cudaStream, &steps);
-
-    cudaStreamSynchronize(cudaStream);
-    str::print("Time:", time.elapsed() * 1e3, "ms");
-    str::print("Steps:", steps);
-
-    // calculate electrical potential at cross section from 2.5D model
-    auto potential = std::make_shared<numeric::Matrix<dataType>>(forwardSolver->phi[0]->rows,
-        forwardSolver->phi[0]->cols, cudaStream);
-    for (auto const phi : forwardSolver->phi) {
-        potential->add(phi, cudaStream);
+    else if (std::string(modelConfig["numericType"]) == "complex") {
+        solveForwardModelFromConfig<thrust::complex<double>>(modelConfig, path, cublasHandle, cudaStream);
     }
-
-    // Print and save results
-    result->copyToHost(cudaStream);
-    potential->copyToHost(cudaStream);
-    cudaStreamSynchronize(cudaStream);
-
-    str::print("----------------------------------------------------");
-    str::print("Result:");
-    str::print(*result);
-    result->savetxt(str::format("%s/result.txt")(path));
-    potential->savetxt(str::format("%s/potential.txt")(path));
 
     // cleanup
     json_value_free(config);
