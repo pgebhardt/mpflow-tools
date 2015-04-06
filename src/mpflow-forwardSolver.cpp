@@ -9,7 +9,7 @@
 using namespace mpFlow;
 
 // use complex or real data type
-#define dataType double
+#define dataType thrust::complex<double>
 
 int main(int argc, char* argv[]) {
     HighPrecisionTime time;
@@ -72,10 +72,10 @@ int main(int argc, char* argv[]) {
     // load mesh from config
     auto const mesh = createMeshFromConfig(modelConfig["mesh"], path, electrodes);
 
-    // load predefined gamma distribution from file, if path is given
-    auto const gamma = [=](json_value const& gammaFile) {
-        if (gammaFile.type != json_none) {
-            return numeric::Matrix<dataType>::loadtxt(str::format("%s/%s")(path, std::string(gammaFile)), cudaStream);
+    // load predefined material distribution from file, if path is given
+    auto const material = [=](json_value const& materialFile) {
+        if (materialFile.type != json_none) {
+            return numeric::Matrix<dataType>::loadtxt(str::format("%s/%s")(path, std::string(materialFile)), cudaStream);
         }
         else {
             return std::make_shared<numeric::Matrix<dataType>>(mesh->elements.rows(), 1, cudaStream, dataType(1));
@@ -94,45 +94,37 @@ int main(int argc, char* argv[]) {
         mesh, source->electrodes, modelConfig["referenceValue"].u.dbl, cudaStream);
 
     // Create forward solver and solve potential
-    // use different numeric solver for different source types
-    std::shared_ptr<numeric::Matrix<dataType> const> result = nullptr, potential = nullptr;
-    unsigned steps = 0;
+    auto forwardSolver = std::make_shared<EIT::ForwardSolver<numeric::BiCGSTAB, decltype(equation)::element_type>>(
+        equation, source, modelConfig["componentsCount"].u.integer, cublasHandle, cudaStream);
+
+    // use override initial guess of potential for fixed sources to improve convergence
     if (source->type == FEM::SourceDescriptor<dataType>::Type::Fixed) {
-        auto forwardSolver = std::make_shared<EIT::ForwardSolver<numeric::BiCGSTAB, decltype(equation)::element_type>>(
-            equation, source, modelConfig["componentsCount"].u.integer, cublasHandle, cudaStream);
-
         for (auto phi : forwardSolver->phi) {
-            phi->fill(1.0, cudaStream);
+            phi->fill(dataType(1), cudaStream);
         }
-
-        cudaStreamSynchronize(cudaStream);
-        str::print("Time:", time.elapsed() * 1e3, "ms");
-
-        str::print("----------------------------------------------------");
-        str::print("Solve electrical potential for all excitations");
-        time.restart();
-
-        result = forwardSolver->solve(gamma, cublasHandle, cudaStream, &steps);
-        potential = forwardSolver->phi[0];
-    }
-    else {
-        auto forwardSolver = std::make_shared<EIT::ForwardSolver<numeric::ConjugateGradient, decltype(equation)::element_type>>(
-            equation, source, modelConfig["componentsCount"].u.integer, cublasHandle, cudaStream);
-
-        cudaStreamSynchronize(cudaStream);
-        str::print("Time:", time.elapsed() * 1e3, "ms");
-
-        str::print("----------------------------------------------------");
-        str::print("Solve electrical potential for all excitations");
-        time.restart();
-
-        result = forwardSolver->solve(gamma, cublasHandle, cudaStream, &steps);
-        potential = forwardSolver->phi[0];
     }
 
     cudaStreamSynchronize(cudaStream);
-    str::print("Time:", time.elapsed() * 1e3, "ms, Steps:", steps, ", Tolerance:",
-        std::numeric_limits<typename typeTraits::extractNumericalType<dataType>::type>::epsilon());
+    str::print("Time:", time.elapsed() * 1e3, "ms");
+
+    str::print("----------------------------------------------------");
+    str::print("Solve electrical potential for all excitations");
+    time.restart();
+
+    // solve forward model
+    unsigned steps = 0;
+    auto result = forwardSolver->solve(material, cublasHandle, cudaStream, &steps);
+
+    // calculate electrical potential at cross section from 2.5D model
+    auto potential = std::make_shared<numeric::Matrix<dataType>>(forwardSolver->phi[0]->rows,
+        forwardSolver->phi[0]->cols, cudaStream);
+    for (auto const phi : forwardSolver->phi) {
+        potential->add(phi, cudaStream);
+    }
+
+    cudaStreamSynchronize(cudaStream);
+    str::print("Time:", time.elapsed() * 1e3, "ms");
+    str::print("Steps:", steps);
 
     // Print and save results
     result->copyToHost(cudaStream);
