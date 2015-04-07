@@ -8,6 +8,20 @@
 
 using namespace mpFlow;
 
+// plot result for complex types with real and imaginary part
+template <typename dataType>
+void printResult(std::shared_ptr<numeric::Matrix<dataType> const> const result) {
+    str::print(result->toEigen());
+}
+
+template <typename dataType>
+void printResult(std::shared_ptr<numeric::Matrix<thrust::complex<dataType>> const> const result) {
+    str::print("Real Part:");
+    str::print(result->toEigen().real());
+    str::print("Imaginary Part:");
+    str::print(result->toEigen().imag());
+}
+
 template <
     class dataType,
     template <class> class numericalSolverType
@@ -88,7 +102,7 @@ void solveForwardModelFromConfig(json_value const& config, std::string const pat
 
     str::print("----------------------------------------------------");
     str::print("Result:");
-    str::print(*result);
+    printResult(result);
     result->savetxt(str::format("%s/result.txt")(path));
     potential->savetxt(str::format("%s/potential.txt")(path));
 }
