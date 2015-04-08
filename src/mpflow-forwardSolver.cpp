@@ -3,7 +3,6 @@
 #include <mpflow/mpflow.h>
 #include "stringtools/all.hpp"
 #include "high_precision_time.h"
-#include "json.h"
 #include "helper.h"
 
 using namespace mpFlow;

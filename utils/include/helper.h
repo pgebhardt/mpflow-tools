@@ -1,6 +1,8 @@
 #ifndef MPFLOW_TOOLS_UTILS_HELPER_H
 #define MPFLOW_TOOLS_UTILS_HELPER_H
 
+#include "json.h"
+
 // helper function to create an mpflow matrix from an json array
 template <class dataType>
 std::shared_ptr<mpFlow::numeric::Matrix<dataType>> matrixFromJsonArray(

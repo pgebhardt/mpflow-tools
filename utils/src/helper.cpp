@@ -225,7 +225,7 @@ void printCudaDeviceProperties() {
 std::string getCompilerName() {
 #if defined(__clang__)
     return str::format("clang %s")(__clang_version__);
-#elif define(__GNUC__)
+#elif defined(__GNUC__)
     return str::format("gcc %s")(__VERSION__);
 #else
     return "<unknown>";

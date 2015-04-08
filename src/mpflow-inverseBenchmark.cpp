@@ -1,7 +1,9 @@
+#include <fstream>
 #include <distmesh/distmesh.h>
 #include <mpflow/mpflow.h>
 #include "stringtools/all.hpp"
 #include "high_precision_time.h"
+#include "helper.h"
 
 using namespace mpFlow;
 #define RADIUS (0.085)
@@ -9,68 +11,75 @@ using namespace mpFlow;
 int main(int argc, char* argv[]) {
     HighPrecisionTime time;
 
-    // extrac maximum pipeline length
-    int const maxPipelineLenght = argc > 1 ? atoi(argv[1]) : 512;
+    // check command line arguments
+    if (argc <= 1) {
+        str::print("You need to give a path to the model config");
+        return EXIT_FAILURE;
+    }
 
-    // print out mpFlow version for refernce
-    str::print("mpFlow version:", version::getVersionString());
+    // extrac maximum pipeline length
+    int const maxPipelineLenght = argc > 2 ? atoi(argv[2]) : 512;
+
+    // print out basic system info for reference
+    str::print("----------------------------------------------------");
+    str::print("mpFlow", version::getVersionString(),
+        str::format("(%s %s)")(__DATE__, __TIME__));
+    str::print(str::format("[%s] on %s")(getCompilerName(), _TARGET_ARCH_NAME_));
+    str::print("----------------------------------------------------");
+    printCudaDeviceProperties();
 
     // init cuda
     cudaStream_t cudaStream = nullptr;
     cublasHandle_t cublasHandle = nullptr;
+
+    cudaSetDevice(argc <= 3 ? 0 : cudaSetDevice(atoi(argv[3])));
     cublasCreate(&cublasHandle);
     cudaStreamCreate(&cudaStream);
 
-    // create model classes corresponding to ERT 2.0 measurement system
-    // create standard pattern
-    auto drivePattern = std::make_shared<numeric::Matrix<int>>(36, 18, cudaStream);
-    auto measurementPattern = std::make_shared<numeric::Matrix<int>>(36, 18, cudaStream);
-    for (unsigned i = 0; i < drivePattern->cols; ++i) {
-        // simple ERT 2.0 pattern
-        (*drivePattern)(i * 2, i) = 1 - (i % 2) * 2;
-        (*drivePattern)(((i + 1) * 2) % drivePattern->rows, i) = -1 + (i % 2) * 2;
-    }
-    for (unsigned i = 0; i < measurementPattern->cols; ++i) {
-        // simple ERT 2.0 pattern
-        (*measurementPattern)(i * 2 + 1, i) = 1 - (i % 2) * 2;
-        (*measurementPattern)(((i + 1) * 2 + 1) % measurementPattern->rows, i) = -1 + (i % 2) * 2;
-    }
-    drivePattern->copyToDevice(cudaStream);
-    measurementPattern->copyToDevice(cudaStream);
+    // extract filename and its path from command line arguments
+    std::string const filename = argv[1];
+    std::string const path = filename.find_last_of("/") == std::string::npos ?
+        "./" : filename.substr(0, filename.find_last_of("/"));
 
-    // Create Mesh using libdistmesh
+    // load config from file
+    std::ifstream file(filename);
+    std::string const fileContent((std::istreambuf_iterator<char>(file)),
+        std::istreambuf_iterator<char>());
+    auto const config = json_parse(fileContent.c_str(), fileContent.length());
+
+    // check for success
+    if (config == nullptr) {
+        str::print("Error: Cannot parse config file");
+        return EXIT_FAILURE;
+    }
+
+    // extract model config
+    auto const modelConfig = (*config)["model"];
+    if (modelConfig.type == json_none) {
+        str::print("Error: Invalid model config");
+        return EXIT_FAILURE;
+    }
+
+    // Create model helper classes
+    auto const electrodes = createBoundaryDescriptorFromConfig(modelConfig["electrodes"], modelConfig["mesh"]["radius"].u.dbl);
+    auto const source = createSourceFromConfig<float>(modelConfig["source"], electrodes, cudaStream);
+
     time.restart();
     str::print("----------------------------------------------------");
-    str::print("Create mesh using libdistmesh with uniform grid size");
 
-    auto dist_mesh = distmesh::distmesh(distmesh::distanceFunction::circular(RADIUS),
-        0.006, 1.0, RADIUS * 1.1 * distmesh::boundingBox(2));
-    auto boundary = distmesh::boundEdges(std::get<1>(dist_mesh));
+    // load mesh from config
+    auto const mesh = createMeshFromConfig(modelConfig["mesh"], path, electrodes);
 
-    str::print("Mesh created with", std::get<0>(dist_mesh).rows(), "nodes and",
-        std::get<1>(dist_mesh).rows(), "elements");
+    str::print("Mesh loaded with", mesh->nodes.rows(), "nodes and", mesh->elements.rows(), "elements");
     str::print("Time:", time.elapsed() * 1e3, "ms");
 
-    // create mpflow mesh object
-    auto mesh = std::make_shared<numeric::IrregularMesh>(std::get<0>(dist_mesh),
-        std::get<1>(dist_mesh), boundary, RADIUS, 0.4);
-
-    // create electrodes
-    auto electrodes = FEM::boundaryDescriptor::circularBoundary(
-        36, std::make_tuple(0.005, 0.005), RADIUS, 0.0);
-
-    // create source
-    auto source = std::make_shared<FEM::SourceDescriptor<float>>(
-        FEM::SourceDescriptor<float>::Type::Open, 1.0, electrodes,
-        drivePattern, measurementPattern, cudaStream);
-
-    time.restart();
     str::print("----------------------------------------------------");
-    str::print("Create equation model class");
+    str::print("Initialize forward model");
+    time.restart();
 
-    // create equation
-    auto equation = std::make_shared<FEM::Equation<float, FEM::basis::Linear>>(
-        mesh, electrodes, 1.0, cudaStream);
+    // Create main model class
+    auto equation = std::make_shared<FEM::Equation<float, FEM::basis::Linear, false>>(
+        mesh, source->electrodes, modelConfig["referenceValue"].u.dbl, cudaStream);
 
     cudaStreamSynchronize(cudaStream);
     str::print("Time:", time.elapsed() * 1e3, "ms");
@@ -80,7 +89,8 @@ int main(int argc, char* argv[]) {
     str::print("----------------------------------------------------");
     str::print("Create main solver class");
 
-    auto solver = std::make_shared<EIT::Solver<numeric::ConjugateGradient>>(
+    auto solver = std::make_shared<EIT::Solver<numeric::ConjugateGradient,
+        typename decltype(equation)::element_type>>(
         equation, source, 7, 1, 0.0, cublasHandle, cudaStream);
 
     cudaStreamSynchronize(cudaStream);
@@ -99,23 +109,40 @@ int main(int argc, char* argv[]) {
     str::print("----------------------------------------------------");
     str::print("Reconstruct images for different pipeline lengths:\n");
 
+    Eigen::ArrayXd result = Eigen::ArrayXd::Zero(maxPipelineLenght);
     for (unsigned length = 1; length <= maxPipelineLenght; ++length) {
         // create inverse solver
-        solver = std::make_shared<EIT::Solver<numeric::ConjugateGradient>>(
-            equation, source, 7, length, 0.0, cublasHandle, cudaStream);
+        solver = std::make_shared<EIT::Solver<numeric::ConjugateGradient,
+            typename decltype(equation)::element_type>>(
+            equation, source, 7, length, 1e-4, cublasHandle, cudaStream);
+        solver->preSolve(cublasHandle, cudaStream);
+
+        // clear reference scenario to force solve to calculate all iteration steps
+        for (auto ref : solver->calculation) {
+            ref->scalarMultiply(0.0, cudaStream);
+        }
 
         cudaStreamSynchronize(cudaStream);
         time.restart();
 
         for (unsigned i = 0; i < 10; ++i) {
-            solver->solveDifferential(cublasHandle, cudaStream);
+            solver->solveDifferential(cublasHandle, cudaStream,
+                solver->gamma->rows / 8);
         }
 
         cudaStreamSynchronize(cudaStream);
-        str::print("pipeline length:", length, "; time:",
-            time.elapsed() / 10.0 * 1e3, "ms ; fps:",
-            (double)length / (time.elapsed() / 10.0));
+        result(length - 1) = time.elapsed() / 10.0;
+
+        if (length % 16 == 0) {
+            str::print("pipeline length:", length, "; time:",
+                result(length - 1) * 1e3, "ms ; fps:",
+                (double)length / result(length - 1));
+        }
     }
+
+    // save benchmark result
+    numeric::Matrix<double>::fromEigen(result, cudaStream)->savetxt(
+        str::format("%s/inverseBenchmarkResult.txt")(path));
 
     return EXIT_SUCCESS;
 }
