@@ -8,6 +8,11 @@ template <class dataType>
 std::shared_ptr<mpFlow::numeric::Matrix<dataType>> matrixFromJsonArray(
     json_value const& array, cudaStream_t const cudaStream);
 
+// creates eigen array from an json array
+template <class type>
+Eigen::Array<type, Eigen::Dynamic, Eigen::Dynamic> eigenFromJsonArray(
+    json_value const& array);
+
 // helper function to create boundaryDescriptor from config file
 std::shared_ptr<mpFlow::FEM::BoundaryDescriptor> createBoundaryDescriptorFromConfig(
     json_value const& config, double const modelRadius);

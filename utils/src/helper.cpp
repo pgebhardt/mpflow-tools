@@ -33,13 +33,47 @@ std::shared_ptr<mpFlow::numeric::Matrix<dataType>> matrixFromJsonArray(
     return matrix;
 }
 
+// creates eigen array from an json array
+template <class type>
+Eigen::Array<type, Eigen::Dynamic, Eigen::Dynamic> eigenFromJsonArray(
+    json_value const& array) {
+    // exctract sizes
+    unsigned rows = array.u.array.length;
+    unsigned cols = array[0].type == json_array ? array[0].u.array.length : 1;
+
+    // create array
+    Eigen::Array<type, Eigen::Dynamic, Eigen::Dynamic> eigenArray(rows, cols);
+
+    // extract values
+    if (array[0].type != json_array) {
+        for (unsigned row = 0; row < eigenArray.rows(); ++row) {
+            eigenArray(row, 0) = array[row].u.dbl;
+        }
+    }
+    else {
+        for (unsigned row = 0; row < eigenArray.rows(); ++row)
+        for (unsigned col = 0; col < eigenArray.cols(); ++col) {
+            eigenArray(row, col) = array[row][col].u.dbl;
+        }
+    }
+
+    return eigenArray;
+}
+
 // helper function to create boundaryDescriptor from config file
 std::shared_ptr<mpFlow::FEM::BoundaryDescriptor> createBoundaryDescriptorFromConfig(
     json_value const& config, double const modelRadius) {
-    // create boundaryDescriptor from config to fix mesh nodes to boundary nodes
-    return mpFlow::FEM::boundaryDescriptor::circularBoundary(
-        config["count"].u.integer, std::make_tuple(config["width"].u.dbl, config["height"].u.dbl),
-        modelRadius, config["offset"].u.dbl);
+    // extract descriptor coordinates from config, or create circular descriptor
+    // if no coordinates are given
+    if (config["coordinates"].type != json_none) {
+        return std::make_shared<mpFlow::FEM::BoundaryDescriptor>(
+            eigenFromJsonArray<double>(config["coordinates"]), config["height"].u.dbl);
+    }
+    else {
+        return mpFlow::FEM::boundaryDescriptor::circularBoundary(
+            config["count"].u.integer, config["width"].u.dbl, config["height"].u.dbl,
+            modelRadius, config["offset"].u.dbl);
+    }
 }
 
 // helper to initialize mesh from config file

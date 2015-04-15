@@ -43,7 +43,7 @@ int main(int argc, char* argv[]) {
 
         // create electrodes
         auto electrodes = FEM::boundaryDescriptor::circularBoundary(
-            16, std::make_tuple(0.03, 0.1), 1.0, 0.0);
+            16, 0.03, 0.1, 1.0, 0.0);
 
         // create pattern
         auto drivePattern = numeric::Matrix<int>::eye(electrodes->count, cudaStream);

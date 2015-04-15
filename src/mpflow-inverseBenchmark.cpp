@@ -27,6 +27,8 @@ int main(int argc, char* argv[]) {
     str::print(str::format("[%s] on %s")(getCompilerName(), _TARGET_ARCH_NAME_));
     str::print("----------------------------------------------------");
     printCudaDeviceProperties();
+    str::print("----------------------------------------------------");
+    str::print("Config file:", argv[1]);
 
     // init cuda
     cudaStream_t cudaStream = nullptr;
