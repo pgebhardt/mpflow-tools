@@ -63,16 +63,24 @@ Eigen::Array<type, Eigen::Dynamic, Eigen::Dynamic> eigenFromJsonArray(
 // helper function to create boundaryDescriptor from config file
 std::shared_ptr<mpFlow::FEM::BoundaryDescriptor> createBoundaryDescriptorFromConfig(
     json_value const& config, double const modelRadius) {
+    // check for correct config
+    if (config["height"].type == json_none) {
+        return nullptr;
+    }
+
     // extract descriptor coordinates from config, or create circular descriptor
     // if no coordinates are given
     if (config["coordinates"].type != json_none) {
         return std::make_shared<mpFlow::FEM::BoundaryDescriptor>(
             eigenFromJsonArray<double>(config["coordinates"]), config["height"].u.dbl);
     }
-    else {
+    else if ((config["width"].type != json_none) && (config["count"].type != json_none)) {
         return mpFlow::FEM::boundaryDescriptor::circularBoundary(
             config["count"].u.integer, config["width"].u.dbl, config["height"].u.dbl,
             modelRadius, config["offset"].u.dbl);
+    }
+    else {
+        return nullptr;
     }
 }
 
@@ -80,23 +88,27 @@ std::shared_ptr<mpFlow::FEM::BoundaryDescriptor> createBoundaryDescriptorFromCon
 std::shared_ptr<mpFlow::numeric::IrregularMesh> createMeshFromConfig(
     json_value const& config, std::string const path,
     std::shared_ptr<mpFlow::FEM::BoundaryDescriptor const> const boundaryDescriptor) {
-    std::shared_ptr<mpFlow::numeric::IrregularMesh> mesh = nullptr;
+    // check for correct config
+    if (config["height"].type == json_none) {
+        return nullptr;
+    }
 
     // extract basic mesh parameter
-    double radius = config["radius"];
     double height = config["height"];
 
-    if (config["meshPath"].type != json_none) {
+    if (config["path"].type != json_none) {
         // load mesh from file
-        std::string meshPath = str::format("%s/%s")(path, std::string(config["meshPath"]));
+        std::string meshPath = str::format("%s/%s")(path, std::string(config["path"]));
 
         auto nodes = mpFlow::numeric::Matrix<double>::loadtxt(str::format("%s/nodes.txt")(meshPath), nullptr);
         auto elements = mpFlow::numeric::Matrix<int>::loadtxt(str::format("%s/elements.txt")(meshPath), nullptr);
         auto boundary = mpFlow::numeric::Matrix<int>::loadtxt(str::format("%s/boundary.txt")(meshPath), nullptr);
-        mesh = std::make_shared<mpFlow::numeric::IrregularMesh>(nodes->toEigen(), elements->toEigen(),
-            boundary->toEigen(), radius, height);
+        return std::make_shared<mpFlow::numeric::IrregularMesh>(nodes->toEigen(), elements->toEigen(),
+            boundary->toEigen(), height);
     }
-    else {
+    else if ((config["radius"].type != json_none) &&
+            (config["outerEdgeLength"].type != json_none) &&
+            (config["innerEdgeLength"].type != json_none)) {
         // fix mesh at boundaryDescriptor boundaries
         Eigen::ArrayXXd fixedPoints(boundaryDescriptor->count * 2, 2);
         for (unsigned i = 0; i < boundaryDescriptor->count; ++i) {
@@ -105,23 +117,27 @@ std::shared_ptr<mpFlow::numeric::IrregularMesh> createMeshFromConfig(
         }
 
         // create mesh with libdistmesh
+        double const radius = config["radius"];
         auto distanceFuntion = distmesh::distanceFunction::circular(radius);
         auto dist_mesh = distmesh::distmesh(distanceFuntion, config["outerEdgeLength"],
             1.0 + (1.0 - (double)config["innerEdgeLength"] / (double)config["outerEdgeLength"]) *
             distanceFuntion / radius, 1.1 * radius * distmesh::boundingBox(2), fixedPoints);
 
         // create mpflow matrix objects from distmesh arrays
-        mesh = std::make_shared<mpFlow::numeric::IrregularMesh>(std::get<0>(dist_mesh), std::get<1>(dist_mesh),
-            distmesh::boundEdges(std::get<1>(dist_mesh)), radius, height);
+        auto mesh = std::make_shared<mpFlow::numeric::IrregularMesh>(std::get<0>(dist_mesh), std::get<1>(dist_mesh),
+            distmesh::boundEdges(std::get<1>(dist_mesh)), height);
 
         // save mesh to files for later usage
         mkdir(str::format("%s/mesh")(path).c_str(), 0777);
         mpFlow::numeric::Matrix<double>::fromEigen(mesh->nodes, nullptr)->savetxt(str::format("%s/mesh/nodes.txt")(path));
         mpFlow::numeric::Matrix<int>::fromEigen(mesh->elements, nullptr)->savetxt(str::format("%s/mesh/elements.txt")(path));
         mpFlow::numeric::Matrix<int>::fromEigen(mesh->boundary, nullptr)->savetxt(str::format("%s/mesh/boundary.txt")(path));
-    }
 
-    return mesh;
+        return mesh;
+    }
+    else {
+        return nullptr;
+    }
 }
 
 // helper to create source descriptor from config file
@@ -155,7 +171,8 @@ std::shared_ptr<mpFlow::FEM::SourceDescriptor<dataType>> createSourceFromConfig(
         }
     }
     else {
-        excitation = std::vector<dataType>(drivePattern->cols, config["value"].u.dbl);
+        excitation = std::vector<dataType>(drivePattern->cols,
+            config["value"].type != json_none ? config["value"].u.dbl : dataType(1));
     }
 
     // create source descriptor

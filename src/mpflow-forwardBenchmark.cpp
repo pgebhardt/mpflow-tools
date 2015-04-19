@@ -39,7 +39,7 @@ int main(int argc, char* argv[]) {
 
         // create mpflow mesh object
         auto mesh = std::make_shared<numeric::IrregularMesh>(std::get<0>(dist_mesh),
-            std::get<1>(dist_mesh), boundary, 1.0, 1.0);
+            std::get<1>(dist_mesh), boundary, 1.0);
 
         // create electrodes
         auto electrodes = FEM::boundaryDescriptor::circularBoundary(

@@ -90,19 +90,24 @@ int main(int argc, char* argv[]) {
     str::print("Create main model class");
 
     auto equation = std::make_shared<FEM::Equation<dataType, FEM::basis::Linear, false>>(
-        mesh, source->electrodes, modelConfig["referenceValue"].u.dbl, cudaStream);
+        mesh, source->electrodes, 1.0, cudaStream);
 
     cudaStreamSynchronize(cudaStream);
     str::print("Time:", time.elapsed() * 1e3, "ms");
 
-    // load predefined gamma distribution from file, if path is given
-    std::shared_ptr<numeric::Matrix<dataType>> gamma = nullptr;
-    if (modelConfig["gammaFile"].type != json_none) {
-        gamma = numeric::Matrix<dataType>::loadtxt(str::format("%s/%s")(path, std::string(modelConfig["gammaFile"])), cudaStream);
-    }
-    else {
-        gamma = std::make_shared<numeric::Matrix<dataType>>(mesh->elements.rows(), 1, cudaStream, 1.0);
-    }
+    // load predefined material distribution from file, if path is given
+    auto const material = [=](json_value const& material) -> std::shared_ptr<numeric::Matrix<dataType>> {
+        if (material.type == json_string) {
+            return numeric::Matrix<dataType>::loadtxt(str::format("%s/%s")(path, std::string(material)), cudaStream);
+        }
+        else if (material.type == json_double) {
+            return std::make_shared<numeric::Matrix<dataType>>(mesh->elements.rows(), 1,
+                cudaStream, dataType(material));
+        }
+        else {
+            return nullptr;
+        }
+    }(modelConfig["material"]);
 
     // Create solver and reconstruct image
     time.restart();
@@ -121,11 +126,11 @@ int main(int argc, char* argv[]) {
     unsigned steps = 0;
     if (source->type == FEM::SourceDescriptor<dataType>::Type::Fixed) {
         auto solver = std::make_shared<EIT::Solver<numeric::BiCGSTAB, decltype(equation)::element_type>>(
-            equation, source, modelConfig["componentsCount"].u.integer,
+            equation, source, std::max(1, (int)modelConfig["componentsCount"].u.integer),
             1, solverConfig["regularizationFactor"].u.dbl, cublasHandle, cudaStream);
 
         // set loaded gamma distribution
-        solver->gamma->copy(gamma, cudaStream);
+        solver->gamma->copy(material, cudaStream);
         solver->preSolve(cublasHandle, cudaStream);
 
         // copy refernce and measurement to solver
@@ -139,11 +144,11 @@ int main(int argc, char* argv[]) {
     }
     else {
         auto solver = std::make_shared<EIT::Solver<numeric::ConjugateGradient, decltype(equation)::element_type>>(
-            equation, source, modelConfig["componentsCount"].u.integer,
+            equation, source, std::max(1, (int)modelConfig["componentsCount"].u.integer),
             1, solverConfig["regularizationFactor"].u.dbl, cublasHandle, cudaStream);
 
         // set loaded gamma distribution
-        solver->gamma->copy(gamma, cudaStream);
+        solver->gamma->copy(material, cudaStream);
         solver->preSolve(cublasHandle, cudaStream);
 
         // copy refernce and measurement to solver
@@ -163,8 +168,6 @@ int main(int argc, char* argv[]) {
     result->copyToHost(cudaStream);
     cudaStreamSynchronize(cudaStream);
     result->savetxt(str::format("%s/reconstruction.txt")(path));
-
-    // Save mesh
 
     // cleanup
     json_value_free(config);

@@ -63,7 +63,8 @@ int main(int argc, char* argv[]) {
     }
 
     // Create model helper classes
-    auto const electrodes = createBoundaryDescriptorFromConfig(modelConfig["electrodes"], modelConfig["mesh"]["radius"].u.dbl);
+    auto const electrodes = createBoundaryDescriptorFromConfig(modelConfig["electrodes"],
+        modelConfig["mesh"]["radius"].u.dbl);
     auto const source = createSourceFromConfig<float>(modelConfig["source"], electrodes, cudaStream);
 
     time.restart();
@@ -81,7 +82,7 @@ int main(int argc, char* argv[]) {
 
     // Create main model class
     auto equation = std::make_shared<FEM::Equation<float, FEM::basis::Linear, false>>(
-        mesh, source->electrodes, modelConfig["referenceValue"].u.dbl, cudaStream);
+        mesh, source->electrodes, 1.0, cudaStream);
 
     cudaStreamSynchronize(cudaStream);
     str::print("Time:", time.elapsed() * 1e3, "ms");
@@ -116,7 +117,7 @@ int main(int argc, char* argv[]) {
         // create inverse solver
         solver = std::make_shared<EIT::Solver<numeric::ConjugateGradient,
             typename decltype(equation)::element_type>>(
-            equation, source, 7, length, 1e-4, cublasHandle, cudaStream);
+            equation, source, 7, length, 0.0, cublasHandle, cudaStream);
         solver->preSolve(cublasHandle, cudaStream);
 
         // clear reference scenario to force solve to calculate all iteration steps

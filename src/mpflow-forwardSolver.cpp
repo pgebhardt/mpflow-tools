@@ -30,7 +30,8 @@ void solveForwardModelFromConfig(json_value const& config, std::string const pat
     HighPrecisionTime time;
 
     // Create model helper classes
-    auto const electrodes = createBoundaryDescriptorFromConfig(config["electrodes"], config["mesh"]["radius"].u.dbl);
+    auto const electrodes = createBoundaryDescriptorFromConfig(config["electrodes"],
+        config["mesh"]["radius"].u.dbl);
     auto const source = createSourceFromConfig<dataType>(config["source"], electrodes, cudaStream);
 
     time.restart();
@@ -40,14 +41,18 @@ void solveForwardModelFromConfig(json_value const& config, std::string const pat
     auto const mesh = createMeshFromConfig(config["mesh"], path, electrodes);
 
     // load predefined material distribution from file, if path is given
-    auto const material = [=](json_value const& materialFile) {
-        if (materialFile.type != json_none) {
-            return numeric::Matrix<dataType>::loadtxt(str::format("%s/%s")(path, std::string(materialFile)), cudaStream);
+    auto const material = [=](json_value const& material) -> std::shared_ptr<numeric::Matrix<dataType>> {
+        if (material.type == json_string) {
+            return numeric::Matrix<dataType>::loadtxt(str::format("%s/%s")(path, std::string(material)), cudaStream);
+        }
+        else if (material.type == json_double) {
+            return std::make_shared<numeric::Matrix<dataType>>(mesh->elements.rows(), 1,
+                cudaStream, dataType(material));
         }
         else {
-            return std::make_shared<numeric::Matrix<dataType>>(mesh->elements.rows(), 1, cudaStream, dataType(1));
+            return nullptr;
         }
-    }(config["gammaFile"]);
+    }(config["material"]);
 
     str::print("Mesh loaded with", mesh->nodes.rows(), "nodes and", mesh->elements.rows(), "elements");
     str::print("Time:", time.elapsed() * 1e3, "ms");
@@ -58,7 +63,7 @@ void solveForwardModelFromConfig(json_value const& config, std::string const pat
 
     // Create main model class
     auto equation = std::make_shared<FEM::Equation<dataType, FEM::basis::Linear, false>>(
-        mesh, source->electrodes, config["referenceValue"].u.dbl, cudaStream);
+        mesh, source->electrodes, 1.0, cudaStream);
 
     // Create forward solver and solve potential
     auto forwardSolver = std::make_shared<EIT::ForwardSolver<numericalSolverType,
