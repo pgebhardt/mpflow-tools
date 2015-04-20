@@ -38,7 +38,7 @@ void solveForwardModelFromConfig(json_value const& config, std::string const pat
     str::print("----------------------------------------------------");
 
     // load mesh from config
-    auto const mesh = createMeshFromConfig(config["mesh"], path, electrodes);
+    auto const mesh = createMeshFromConfig(config["mesh"], path, electrodes, cudaStream);
 
     // load predefined material distribution from file, if path is given
     auto const material = [=](json_value const& material) -> std::shared_ptr<numeric::Matrix<dataType>> {
@@ -118,6 +118,14 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
 
+    // init cuda
+    cudaStream_t cudaStream = nullptr;
+    cublasHandle_t cublasHandle = nullptr;
+
+    cudaSetDevice(argc <= 2 ? 0 : cudaSetDevice(atoi(argv[2])));
+    cublasCreate(&cublasHandle);
+    cudaStreamCreate(&cudaStream);
+
     // print out basic system info for reference
     str::print("----------------------------------------------------");
     str::print("mpFlow", version::getVersionString(),
@@ -127,14 +135,6 @@ int main(int argc, char* argv[]) {
     printCudaDeviceProperties();
     str::print("----------------------------------------------------");
     str::print("Config file:", argv[1]);
-
-    // init cuda
-    cudaStream_t cudaStream = nullptr;
-    cublasHandle_t cublasHandle = nullptr;
-
-    cudaSetDevice(argc <= 2 ? 0 : cudaSetDevice(atoi(argv[2])));
-    cublasCreate(&cublasHandle);
-    cudaStreamCreate(&cudaStream);
 
     // extract filename and its path from command line arguments
     std::string const filename = argv[1];

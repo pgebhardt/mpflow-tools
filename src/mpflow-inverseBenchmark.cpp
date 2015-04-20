@@ -20,6 +20,14 @@ int main(int argc, char* argv[]) {
     // extrac maximum pipeline length
     int const maxPipelineLenght = argc > 2 ? atoi(argv[2]) : 512;
 
+    // init cuda
+    cudaStream_t cudaStream = nullptr;
+    cublasHandle_t cublasHandle = nullptr;
+
+    cudaSetDevice(argc <= 3 ? 0 : cudaSetDevice(atoi(argv[3])));
+    cublasCreate(&cublasHandle);
+    cudaStreamCreate(&cudaStream);
+
     // print out basic system info for reference
     str::print("----------------------------------------------------");
     str::print("mpFlow", version::getVersionString(),
@@ -29,14 +37,6 @@ int main(int argc, char* argv[]) {
     printCudaDeviceProperties();
     str::print("----------------------------------------------------");
     str::print("Config file:", argv[1]);
-
-    // init cuda
-    cudaStream_t cudaStream = nullptr;
-    cublasHandle_t cublasHandle = nullptr;
-
-    cudaSetDevice(argc <= 3 ? 0 : cudaSetDevice(atoi(argv[3])));
-    cublasCreate(&cublasHandle);
-    cudaStreamCreate(&cudaStream);
 
     // extract filename and its path from command line arguments
     std::string const filename = argv[1];
@@ -71,7 +71,7 @@ int main(int argc, char* argv[]) {
     str::print("----------------------------------------------------");
 
     // load mesh from config
-    auto const mesh = createMeshFromConfig(modelConfig["mesh"], path, electrodes);
+    auto const mesh = createMeshFromConfig(modelConfig["mesh"], path, electrodes, cudaStream);
 
     str::print("Mesh loaded with", mesh->nodes.rows(), "nodes and", mesh->elements.rows(), "elements");
     str::print("Time:", time.elapsed() * 1e3, "ms");
