@@ -56,13 +56,21 @@ int main(int argc, char* argv[]) {
     }
 
     // load reference and measurement data
-    if (argc <= 3) {
-        str::print("You need to give filenames of refernce and measurement data");
+    if (argc <= 2) {
+        str::print("You need to give filenames of refernce and/or measurement data");
         return EXIT_FAILURE;
     }
 
-    auto refernce = numeric::Matrix<dataType>::loadtxt(argv[2], cudaStream);
-    auto measurement = numeric::Matrix<dataType>::loadtxt(argv[3], cudaStream);
+    std::shared_ptr<numeric::Matrix<dataType>> reference = nullptr, measurement = nullptr;
+    if (argc == 3) {
+        measurement = numeric::Matrix<dataType>::loadtxt(argv[2], cudaStream);
+        reference = std::make_shared<numeric::Matrix<dataType>>(measurement->rows,
+            measurement->cols, cudaStream);
+    }
+    else {
+        reference = numeric::Matrix<dataType>::loadtxt(argv[2], cudaStream);
+        measurement = numeric::Matrix<dataType>::loadtxt(argv[3], cudaStream);
+    }
 
     // Create model helper classes
     time.restart();
@@ -79,7 +87,7 @@ int main(int argc, char* argv[]) {
     time.restart();
     str::print("----------------------------------------------------");
 
-    auto mesh = createMeshFromConfig(modelConfig["mesh"], path, electrodes);
+    auto mesh = createMeshFromConfig(modelConfig["mesh"], path, electrodes, cudaStream);
 
     str::print("Mesh loaded with", mesh->nodes.rows(), "nodes and", mesh->elements.rows(), "elements");
     str::print("Time:", time.elapsed() * 1e3, "ms");
@@ -134,7 +142,7 @@ int main(int argc, char* argv[]) {
         solver->preSolve(cublasHandle, cudaStream);
 
         // copy refernce and measurement to solver
-        solver->calculation[0]->copy(refernce, cudaStream);
+        solver->calculation[0]->copy(reference, cudaStream);
         solver->measurement[0]->copy(measurement, cudaStream);
 
         cudaStreamSynchronize(cudaStream);
@@ -152,7 +160,7 @@ int main(int argc, char* argv[]) {
         solver->preSolve(cublasHandle, cudaStream);
 
         // copy refernce and measurement to solver
-        solver->calculation[0]->copy(refernce, cudaStream);
+        solver->calculation[0]->copy(reference, cudaStream);
         solver->measurement[0]->copy(measurement, cudaStream);
 
         cudaStreamSynchronize(cudaStream);
