@@ -20,7 +20,8 @@ std::shared_ptr<mpFlow::FEM::BoundaryDescriptor> createBoundaryDescriptorFromCon
 // helper to initialize mesh from config file
 std::shared_ptr<mpFlow::numeric::IrregularMesh> createMeshFromConfig(
     json_value const& config, std::string const path,
-    std::shared_ptr<mpFlow::FEM::BoundaryDescriptor const> const boundaryDescriptor);
+    std::shared_ptr<mpFlow::FEM::BoundaryDescriptor const> const boundaryDescriptor,
+    cudaStream_t const cudaStream);
 
 // helper to create source descriptor from config file
 template <class dataType>

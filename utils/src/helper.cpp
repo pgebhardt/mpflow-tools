@@ -87,7 +87,8 @@ std::shared_ptr<mpFlow::FEM::BoundaryDescriptor> createBoundaryDescriptorFromCon
 // helper to initialize mesh from config file
 std::shared_ptr<mpFlow::numeric::IrregularMesh> createMeshFromConfig(
     json_value const& config, std::string const path,
-    std::shared_ptr<mpFlow::FEM::BoundaryDescriptor const> const boundaryDescriptor) {
+    std::shared_ptr<mpFlow::FEM::BoundaryDescriptor const> const boundaryDescriptor,
+    cudaStream_t const cudaStream) {
     // check for correct config
     if (config["height"].type == json_none) {
         return nullptr;
@@ -100,9 +101,9 @@ std::shared_ptr<mpFlow::numeric::IrregularMesh> createMeshFromConfig(
         // load mesh from file
         std::string meshPath = str::format("%s/%s")(path, std::string(config["path"]));
 
-        auto nodes = mpFlow::numeric::Matrix<double>::loadtxt(str::format("%s/nodes.txt")(meshPath), nullptr);
-        auto elements = mpFlow::numeric::Matrix<int>::loadtxt(str::format("%s/elements.txt")(meshPath), nullptr);
-        auto boundary = mpFlow::numeric::Matrix<int>::loadtxt(str::format("%s/boundary.txt")(meshPath), nullptr);
+        auto nodes = mpFlow::numeric::Matrix<double>::loadtxt(str::format("%s/nodes.txt")(meshPath), cudaStream);
+        auto elements = mpFlow::numeric::Matrix<int>::loadtxt(str::format("%s/elements.txt")(meshPath), cudaStream);
+        auto boundary = mpFlow::numeric::Matrix<int>::loadtxt(str::format("%s/boundary.txt")(meshPath), cudaStream);
         return std::make_shared<mpFlow::numeric::IrregularMesh>(nodes->toEigen(), elements->toEigen(),
             boundary->toEigen(), height);
     }
@@ -129,9 +130,9 @@ std::shared_ptr<mpFlow::numeric::IrregularMesh> createMeshFromConfig(
 
         // save mesh to files for later usage
         mkdir(str::format("%s/mesh")(path).c_str(), 0777);
-        mpFlow::numeric::Matrix<double>::fromEigen(mesh->nodes, nullptr)->savetxt(str::format("%s/mesh/nodes.txt")(path));
-        mpFlow::numeric::Matrix<int>::fromEigen(mesh->elements, nullptr)->savetxt(str::format("%s/mesh/elements.txt")(path));
-        mpFlow::numeric::Matrix<int>::fromEigen(mesh->boundary, nullptr)->savetxt(str::format("%s/mesh/boundary.txt")(path));
+        mpFlow::numeric::Matrix<double>::fromEigen(mesh->nodes, cudaStream)->savetxt(str::format("%s/mesh/nodes.txt")(path));
+        mpFlow::numeric::Matrix<int>::fromEigen(mesh->elements, cudaStream)->savetxt(str::format("%s/mesh/elements.txt")(path));
+        mpFlow::numeric::Matrix<int>::fromEigen(mesh->boundary, cudaStream)->savetxt(str::format("%s/mesh/boundary.txt")(path));
 
         return mesh;
     }
