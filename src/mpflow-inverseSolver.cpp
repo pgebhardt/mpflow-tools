@@ -103,21 +103,6 @@ int main(int argc, char* argv[]) {
     cudaStreamSynchronize(cudaStream);
     str::print("Time:", time.elapsed() * 1e3, "ms");
 
-    // load predefined material distribution from file, if path is given
-    auto const material = [=](json_value const& material) -> std::shared_ptr<numeric::Matrix<dataType>> {
-        if (material.type == json_string) {
-            return numeric::Matrix<dataType>::loadtxt(str::format("%s/%s")(path, std::string(material)), cudaStream);
-        }
-        else if (material.type == json_double) {
-            return std::make_shared<numeric::Matrix<dataType>>(mesh->elements.rows(), 1,
-                cudaStream, dataType(material));
-        }
-        else {
-            return nullptr;
-        }
-    }(modelConfig["material"]);
-
-    // Create solver and reconstruct image
     time.restart();
     str::print("----------------------------------------------------");
     str::print("Create solver and reconstruct image");
@@ -129,21 +114,29 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
 
+    // extract parallel images count
+    int const parallelImages = std::max(1, (int)solverConfig["parallelImages"].u.integer);
+
+    // Create solver and reconstruct image
     // use different numeric solver for different source types
     std::shared_ptr<numeric::Matrix<dataType> const> result = nullptr;
     unsigned steps = 0;
     if (source->type == FEM::SourceDescriptor<dataType>::Type::Fixed) {
         auto solver = std::make_shared<EIT::Solver<numeric::BiCGSTAB, decltype(equation)::element_type>>(
             equation, source, std::max(1, (int)modelConfig["componentsCount"].u.integer),
-            1, solverConfig["regularizationFactor"].u.dbl, cublasHandle, cudaStream);
+            parallelImages, solverConfig["regularizationFactor"].u.dbl, cublasHandle, cudaStream);
 
-        // set loaded gamma distribution
-        solver->gamma->copy(material, cudaStream);
+        // set material distribution and initialize models
+        solver->gamma->fill(dataType(modelConfig["material"].u.dbl), cudaStream);
         solver->preSolve(cublasHandle, cudaStream);
 
         // copy refernce and measurement to solver
-        solver->calculation[0]->copy(reference, cudaStream);
-        solver->measurement[0]->copy(measurement, cudaStream);
+        for (auto cal : solver->calculation) {
+            cal->copy(reference, cudaStream);
+        }
+        for (auto mes : solver->measurement) {
+            mes->copy(measurement, cudaStream);
+        }
 
         cudaStreamSynchronize(cudaStream);
         time.restart();
@@ -153,15 +146,19 @@ int main(int argc, char* argv[]) {
     else {
         auto solver = std::make_shared<EIT::Solver<numeric::ConjugateGradient, decltype(equation)::element_type>>(
             equation, source, std::max(1, (int)modelConfig["componentsCount"].u.integer),
-            1, solverConfig["regularizationFactor"].u.dbl, cublasHandle, cudaStream);
+            parallelImages, solverConfig["regularizationFactor"].u.dbl, cublasHandle, cudaStream);
 
-        // set loaded gamma distribution
-        solver->gamma->copy(material, cudaStream);
+        // set material distribution and initialize models
+        solver->gamma->fill(dataType(modelConfig["material"].u.dbl), cudaStream);
         solver->preSolve(cublasHandle, cudaStream);
 
         // copy refernce and measurement to solver
-        solver->calculation[0]->copy(reference, cudaStream);
-        solver->measurement[0]->copy(measurement, cudaStream);
+        for (auto cal : solver->calculation) {
+            cal->copy(reference, cudaStream);
+        }
+        for (auto mes : solver->measurement) {
+            mes->copy(measurement, cudaStream);
+        }
 
         cudaStreamSynchronize(cudaStream);
         time.restart();
@@ -170,7 +167,8 @@ int main(int argc, char* argv[]) {
     }
 
     cudaStreamSynchronize(cudaStream);
-    str::print("Time:", time.elapsed() * 1e3, "ms, Steps:", steps);
+    str::print("Time per image:", time.elapsed() * 1e3 / parallelImages, "ms, FPS:",
+        parallelImages / time.elapsed(), "Hz, Iterations:", steps);
 
     // Save results
     result->copyToHost(cudaStream);
