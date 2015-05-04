@@ -9,9 +9,14 @@
 template <class dataType>
 std::shared_ptr<mpFlow::numeric::Matrix<dataType>> matrixFromJsonArray(
     json_value const& array, cudaStream_t const cudaStream) {
+    // check type of json value
+    if (array.type != json_array) {
+        return nullptr;
+    }
+    
     // exctract sizes
-    unsigned rows = array.u.array.length;
-    unsigned cols = array[0].type == json_array ? array[0].u.array.length : 1;
+    unsigned const rows = array.u.array.length;
+    unsigned const cols = array[0].type == json_array ? array[0].u.array.length : 1;
 
     // create matrix
     auto matrix = std::make_shared<mpFlow::numeric::Matrix<dataType>>(rows, cols, cudaStream);
@@ -37,9 +42,14 @@ std::shared_ptr<mpFlow::numeric::Matrix<dataType>> matrixFromJsonArray(
 template <class type>
 Eigen::Array<type, Eigen::Dynamic, Eigen::Dynamic> eigenFromJsonArray(
     json_value const& array) {
+    // check type of json value
+    if (array.type != json_array) {
+        return Eigen::Array<type, Eigen::Dynamic, Eigen::Dynamic>();
+    }
+         
     // exctract sizes
-    unsigned rows = array.u.array.length;
-    unsigned cols = array[0].type == json_array ? array[0].u.array.length : 1;
+    unsigned const rows = array.u.array.length;
+    unsigned const cols = array[0].type == json_array ? array[0].u.array.length : 1;
 
     // create array
     Eigen::Array<type, Eigen::Dynamic, Eigen::Dynamic> eigenArray(rows, cols);
