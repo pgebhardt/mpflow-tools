@@ -88,7 +88,7 @@ void solveInverseModelFromConfig(int argc, char* argv[], json_value const& confi
     int const parallelImages = std::max(1, (int)solverConfig["parallelImages"].u.integer);
 
     // create inverse solver and forward model
-    auto solver = std::make_shared<EIT::Solver<numericalSolverType,
+    auto solver = std::make_shared<EIT::Solver<numericalSolverType, numericalSolverType,
         typename decltype(equation)::element_type>>(
         equation, source, std::max(1, (int)modelConfig["componentsCount"].u.integer),
         parallelImages, solverConfig["regularizationFactor"].u.dbl, cublasHandle, cudaStream);

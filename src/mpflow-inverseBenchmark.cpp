@@ -92,7 +92,7 @@ int main(int argc, char* argv[]) {
     str::print("----------------------------------------------------");
     str::print("Create main solver class");
 
-    auto solver = std::make_shared<EIT::Solver<numeric::ConjugateGradient,
+    auto solver = std::make_shared<EIT::Solver<numeric::ConjugateGradient, numeric::ConjugateGradient,
         typename decltype(equation)::element_type>>(
         equation, source, 7, 1, 0.0, cublasHandle, cudaStream);
 
@@ -115,7 +115,7 @@ int main(int argc, char* argv[]) {
     Eigen::ArrayXd result = Eigen::ArrayXd::Zero(maxPipelineLenght);
     for (unsigned length = 1; length <= maxPipelineLenght; ++length) {
         // create inverse solver
-        solver = std::make_shared<EIT::Solver<numeric::ConjugateGradient,
+        solver = std::make_shared<EIT::Solver<numeric::ConjugateGradient, numeric::ConjugateGradient,
             typename decltype(equation)::element_type>>(
             equation, source, 7, length, 0.0, cublasHandle, cudaStream);
         solver->preSolve(cublasHandle, cudaStream);
