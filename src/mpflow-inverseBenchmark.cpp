@@ -94,7 +94,7 @@ int main(int argc, char* argv[]) {
 
     auto solver = std::make_shared<EIT::Solver<numeric::ConjugateGradient, numeric::ConjugateGradient,
         typename decltype(equation)::element_type>>(
-        equation, source, 7, 1, 0.0, cublasHandle, cudaStream);
+        equation, source, 7, 1, cublasHandle, cudaStream);
 
     cudaStreamSynchronize(cudaStream);
     str::print("Time:", time.elapsed() * 1e3, "ms");
@@ -117,7 +117,7 @@ int main(int argc, char* argv[]) {
         // create inverse solver
         solver = std::make_shared<EIT::Solver<numeric::ConjugateGradient, numeric::ConjugateGradient,
             typename decltype(equation)::element_type>>(
-            equation, source, 7, length, 0.0, cublasHandle, cudaStream);
+            equation, source, 7, length, cublasHandle, cudaStream);
         solver->preSolve(cublasHandle, cudaStream);
 
         // clear reference scenario to force solve to calculate all iteration steps
@@ -130,7 +130,7 @@ int main(int argc, char* argv[]) {
 
         for (unsigned i = 0; i < 10; ++i) {
             solver->solveDifferential(cublasHandle, cudaStream,
-                solver->gamma->rows / 8);
+                solver->result->rows / 8);
         }
 
         cudaStreamSynchronize(cudaStream);
