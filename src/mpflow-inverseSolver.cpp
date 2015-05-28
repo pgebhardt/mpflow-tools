@@ -101,7 +101,7 @@ void solveInverseModelFromConfig(int argc, char* argv[], json_value const& confi
 
     time.restart();
     str::print("----------------------------------------------------");
-    str::print("Create solver and reconstruct image");
+    str::print("Create and initialize solver");
 
     // extract parallel images count
     int const parallelImages = std::max(1, (int)solverConfig["parallelImages"].u.integer);
@@ -121,13 +121,16 @@ void solveInverseModelFromConfig(int argc, char* argv[], json_value const& confi
         if (std::string(config) == "diagonal") {
             return inverseSolverType::RegularizationType::diagonal;
         }
+        else if (std::string(config) == "totalVariational") {
+            return inverseSolverType::RegularizationType::totalVariational;
+        }
         else {
-            return inverseSolverType::RegularizationType::unity;    
+            return inverseSolverType::RegularizationType::identity;    
         }
     }(solverConfig["regularizationType"]);
     
-    solver->inverseSolver->setRegularizationFactor(regularizationFactor, cudaStream);
-    solver->inverseSolver->setRegularizationType(regularizationType, cudaStream);
+    solver->inverseSolver->setRegularizationParameter(regularizationFactor, regularizationType,
+        cublasHandle, cudaStream);
 
     // copy measurement and reference data to solver
     for (auto mes : solver->measurement) {
@@ -137,12 +140,17 @@ void solveInverseModelFromConfig(int argc, char* argv[], json_value const& confi
         cal->copy(reference, cudaStream);
     }
 
+    cudaStreamSynchronize(cudaStream);
+    str::print("Time:", time.elapsed() * 1e3, "ms");
+
     // read out amount of newton steps for reconstruction
     int const newtonSteps = std::max(1, (int)solverConfig["steps"].u.integer);
-    
+
+    str::print("----------------------------------------------------");
+    str::print("Reconstruct image");
+
     // reconstruct image
     if (newtonSteps == 1) {
-        cudaStreamSynchronize(cudaStream);
         time.restart();
 
         unsigned steps = 0;
