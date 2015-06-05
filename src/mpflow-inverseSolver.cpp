@@ -8,21 +8,6 @@
 
 using namespace mpFlow;
 
-template <class dataType>
-dataType parseReferenceValue(json_value const& config) {
-    return config.u.dbl;    
-}
-
-template <>
-thrust::complex<double> parseReferenceValue(json_value const& config) {
-    if (config.type == json_array) {
-        return thrust::complex<double>(config[0], config[1]);
-    }
-    else {
-        return thrust::complex<double>(config.u.dbl);
-    }
-}
-
 template <
     class dataType,
     template <class> class numericalSolverType,
@@ -37,20 +22,6 @@ void solveInverseModelFromConfig(int argc, char* argv[], json_value const& confi
     auto const filenamePos = filename.find_last_of("/");
     std::string const path = filenamePos == std::string::npos ? "./" : filename.substr(0, filenamePos);
 
-    // extract model config
-    auto const modelConfig = config["model"];
-    if (modelConfig.type == json_none) {
-        str::print("Error: Invalid model config");
-        return;
-    }
-
-    // extract model config
-    auto const solverConfig = config["solver"];
-    if (solverConfig.type == json_none) {
-        str::print("Error: Invalid solver config");
-        return;
-    }
-
     // load measurement and reference data
     std::shared_ptr<numeric::Matrix<dataType>> reference = nullptr, measurement = nullptr;
     if (argc == 3) {
@@ -62,75 +33,14 @@ void solveInverseModelFromConfig(int argc, char* argv[], json_value const& confi
         reference = numeric::Matrix<dataType>::loadtxt(argv[2], cudaStream);
         measurement = numeric::Matrix<dataType>::loadtxt(argv[3], cudaStream);
     }
-    
-    // Create model helper classes
-    time.restart();
-    str::print("----------------------------------------------------");
-    str::print("Create model helper classes");
-
-    auto const electrodes = createBoundaryDescriptorFromConfig(modelConfig["electrodes"],
-        modelConfig["mesh"]["radius"].u.dbl);
-    auto const source = createSourceFromConfig<dataType>(modelConfig["source"],
-        electrodes, cudaStream);
-
-    cudaStreamSynchronize(cudaStream);
-    str::print("Time:", time.elapsed() * 1e3, "ms");
-
-    // load mesh from config
-    time.restart();
-    str::print("----------------------------------------------------");
-
-    auto const mesh = createMeshFromConfig(modelConfig["mesh"], path, electrodes, cudaStream);
-
-    str::print("Mesh loaded with", mesh->nodes.rows(), "nodes and", mesh->elements.rows(), "elements");
-    str::print("Time:", time.elapsed() * 1e3, "ms");
-
-    // read out reference value
-    auto const referenceValue = parseReferenceValue<dataType>(modelConfig["material"]);
-    
-    // Create main model class
-    time.restart();
-    str::print("----------------------------------------------------");
-    str::print("Create main model class");
-
-    auto equation = std::make_shared<FEM::Equation<dataType, FEM::basis::Linear, logarithmic>>(
-        mesh, source->electrodes, referenceValue, cudaStream);
-
-    cudaStreamSynchronize(cudaStream);
-    str::print("Time:", time.elapsed() * 1e3, "ms");
 
     time.restart();
     str::print("----------------------------------------------------");
     str::print("Create and initialize solver");
 
-    // extract parallel images count
-    int const parallelImages = std::max(1, (int)solverConfig["parallelImages"].u.integer);
-
-    // create inverse solver and forward model
-    auto solver = std::make_shared<EIT::Solver<numericalSolverType, numericalSolverType,
-        typename decltype(equation)::element_type>>(
-        equation, source, std::max(1, (int)modelConfig["componentsCount"].u.integer),
-        parallelImages, cublasHandle, cudaStream);
-    solver->preSolve(cublasHandle, cudaStream);
-    
-    // extract regularization parameter
-    double const regularizationFactor = solverConfig["regularizationFactor"].u.dbl;
-    auto const regularizationType = [](json_value const& config) {
-        typedef solver::Inverse<dataType, numericalSolverType> inverseSolverType;
-        
-        if (std::string(config) == "diagonal") {
-            return inverseSolverType::RegularizationType::diagonal;
-        }
-        else if (std::string(config) == "totalVariational") {
-            return inverseSolverType::RegularizationType::totalVariational;
-        }
-        else {
-            return inverseSolverType::RegularizationType::identity;    
-        }
-    }(solverConfig["regularizationType"]);
-    
-    solver->inverseSolver->setRegularizationParameter(regularizationFactor, regularizationType,
-        cublasHandle, cudaStream);
+    auto solver = solver::Solver<EIT::ForwardSolver<numericalSolverType,
+        FEM::Equation<dataType, FEM::basis::Linear, logarithmic>>,
+        numericalSolverType>::fromConfig(config, cublasHandle, cudaStream, path);
 
     // copy measurement and reference data to solver
     for (auto mes : solver->measurement) {
@@ -143,33 +53,35 @@ void solveInverseModelFromConfig(int argc, char* argv[], json_value const& confi
     cudaStreamSynchronize(cudaStream);
     str::print("Time:", time.elapsed() * 1e3, "ms");
 
-    // read out amount of newton steps for reconstruction
-    int const newtonSteps = std::max(1, (int)solverConfig["steps"].u.integer);
+    // read out amount of newton and numerical solver steps for reconstruction
+    int const maxIterations = config["solver"]["maxIterations"].u.integer;
+    int const newtonSteps = std::max(1, (int)config["solver"]["steps"].u.integer);
 
     str::print("----------------------------------------------------");
     str::print("Reconstruct image");
 
     // reconstruct image
+    std::shared_ptr<numeric::Matrix<dataType> const> result = nullptr;
     if (newtonSteps == 1) {
         time.restart();
 
         unsigned steps = 0;
-        solver->solveDifferential(cublasHandle, cudaStream, 0, &steps);
+        result = solver->solveDifferential(cublasHandle, cudaStream, maxIterations, &steps);
     
         cudaStreamSynchronize(cudaStream);
-        str::print("Time per image:", time.elapsed() * 1e3 / parallelImages, "ms, FPS:",
-            parallelImages / time.elapsed(), "Hz, Iterations:", steps);        
+        str::print("Time per image:", time.elapsed() * 1e3 / solver->measurement.size(), "ms, FPS:",
+            solver->measurement.size() / time.elapsed(), "Hz, Iterations:", steps);        
     }
     else {
         // correct measurement
         solver->calculation[0]->scalarMultiply(-1.0, cudaStream);
         solver->measurement[0]->add(solver->calculation[0], cudaStream);
-        solver->measurement[0]->add(solver->forwardSolver->result, cudaStream);    
+        solver->measurement[0]->add(solver->forwardModel->result, cudaStream);    
         
         cudaStreamSynchronize(cudaStream);
         time.restart();
 
-        solver->solveAbsolute(newtonSteps, cublasHandle, cudaStream);
+        result = solver->solveAbsolute(newtonSteps, cublasHandle, cudaStream);
         
         cudaStreamSynchronize(cudaStream);
         str::print("Time:", time.elapsed() * 1e3, "ms");                        
@@ -177,15 +89,16 @@ void solveInverseModelFromConfig(int argc, char* argv[], json_value const& confi
     }
 
     // Save results
-    solver->result->copyToHost(cudaStream);
+    result->copyToHost(cudaStream);
     cudaStreamSynchronize(cudaStream);
     
     if (logarithmic) {
-        auto result = referenceValue * (log(10.0) * solver->result->toEigen() / 10.0).exp();
-        numeric::Matrix<dataType>::fromEigen(result, cudaStream)->savetxt(str::format("%s/reconstruction.txt")(path));        
+        numeric::Matrix<dataType>::fromEigen(
+            solver->forwardModel->equation->referenceValue * (log(10.0) * result->toEigen() / 10.0).exp(),
+            cudaStream)->savetxt(str::format("%s/reconstruction.txt")(path));        
     }
     else {
-        solver->result->savetxt(str::format("%s/reconstruction.txt")(path));
+        result->savetxt(str::format("%s/reconstruction.txt")(path));
     }
 }
 

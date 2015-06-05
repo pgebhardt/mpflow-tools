@@ -47,7 +47,7 @@ void solveForwardModelFromConfig(json_value const& config, std::string const pat
         }
         else if (material.type == json_double) {
             return std::make_shared<numeric::Matrix<dataType>>(mesh->elements.rows(), 1,
-                cudaStream, dataType(material));
+                cudaStream, dataType(material.u.dbl));
         }
         else {
             return nullptr;
@@ -69,13 +69,6 @@ void solveForwardModelFromConfig(json_value const& config, std::string const pat
     auto forwardSolver = std::make_shared<EIT::ForwardSolver<numericalSolverType,
         typename decltype(equation)::element_type>>(equation, source,
         std::max(1, (int)config["componentsCount"].u.integer), cublasHandle, cudaStream);
-
-    // use override initial guess of potential for fixed sources to improve convergence
-    if (source->type == FEM::SourceDescriptor<dataType>::Type::Fixed) {
-        for (auto phi : forwardSolver->phi) {
-            phi->fill(dataType(1), cudaStream);
-        }
-    }
 
     cudaStreamSynchronize(cudaStream);
     str::print("Time:", time.elapsed() * 1e3, "ms");

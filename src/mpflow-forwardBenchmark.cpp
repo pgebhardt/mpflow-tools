@@ -42,7 +42,7 @@ int main(int argc, char* argv[]) {
             std::get<1>(dist_mesh), boundary, 1.0);
 
         // create electrodes
-        auto electrodes = FEM::boundaryDescriptor::circularBoundary(
+        auto electrodes = FEM::BoundaryDescriptor::circularBoundary(
             16, 0.03, 0.1, 1.0, 0.0);
 
         // create pattern

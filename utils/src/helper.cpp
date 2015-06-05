@@ -85,7 +85,7 @@ std::shared_ptr<mpFlow::FEM::BoundaryDescriptor> createBoundaryDescriptorFromCon
             eigenFromJsonArray<double>(config["coordinates"]), config["height"].u.dbl);
     }
     else if ((config["width"].type != json_none) && (config["count"].type != json_none)) {
-        return mpFlow::FEM::boundaryDescriptor::circularBoundary(
+        return mpFlow::FEM::BoundaryDescriptor::circularBoundary(
             config["count"].u.integer, config["width"].u.dbl, config["height"].u.dbl,
             modelRadius, config["offset"].u.dbl);
     }

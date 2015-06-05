@@ -92,9 +92,10 @@ int main(int argc, char* argv[]) {
     str::print("----------------------------------------------------");
     str::print("Create main solver class");
 
-    auto solver = std::make_shared<EIT::Solver<numeric::ConjugateGradient, numeric::ConjugateGradient,
-        typename decltype(equation)::element_type>>(
-        equation, source, 7, 1, cublasHandle, cudaStream);
+    auto forwardModel = std::make_shared<EIT::ForwardSolver<numeric::ConjugateGradient,
+        typename decltype(equation)::element_type>>(equation, source, 7, cublasHandle, cudaStream);
+    auto solver = std::make_shared<solver::Solver<typename decltype(forwardModel)::element_type,
+        numeric::ConjugateGradient>>(forwardModel, 1, cublasHandle, cudaStream);
 
     cudaStreamSynchronize(cudaStream);
     str::print("Time:", time.elapsed() * 1e3, "ms");
@@ -115,9 +116,10 @@ int main(int argc, char* argv[]) {
     Eigen::ArrayXd result = Eigen::ArrayXd::Zero(maxPipelineLenght);
     for (unsigned length = 1; length <= maxPipelineLenght; ++length) {
         // create inverse solver
-        solver = std::make_shared<EIT::Solver<numeric::ConjugateGradient, numeric::ConjugateGradient,
-            typename decltype(equation)::element_type>>(
-            equation, source, 7, length, cublasHandle, cudaStream);
+        auto forwardModel = std::make_shared<EIT::ForwardSolver<numeric::ConjugateGradient,
+            typename decltype(equation)::element_type>>(equation, source, 7, cublasHandle, cudaStream);
+        auto solver = std::make_shared<solver::Solver<typename decltype(forwardModel)::element_type,
+            numeric::ConjugateGradient>>(forwardModel, 1, cublasHandle, cudaStream);
         solver->preSolve(cublasHandle, cudaStream);
 
         // clear reference scenario to force solve to calculate all iteration steps
@@ -130,7 +132,7 @@ int main(int argc, char* argv[]) {
 
         for (unsigned i = 0; i < 10; ++i) {
             solver->solveDifferential(cublasHandle, cudaStream,
-                solver->result->rows / 8);
+                solver->materialDistribution->rows / 8);
         }
 
         cudaStreamSynchronize(cudaStream);
