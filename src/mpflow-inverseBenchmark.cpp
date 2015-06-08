@@ -63,15 +63,15 @@ int main(int argc, char* argv[]) {
     }
 
     // Create model helper classes
-    auto const electrodes = createBoundaryDescriptorFromConfig(modelConfig["electrodes"],
+    auto const electrodes = FEM::BoundaryDescriptor::fromConfig(modelConfig["boundary"],
         modelConfig["mesh"]["radius"].u.dbl);
-    auto const source = createSourceFromConfig<float>(modelConfig["source"], electrodes, cudaStream);
+    auto const source = FEM::SourceDescriptor<float>::fromConfig(modelConfig["source"], electrodes, cudaStream);
 
     time.restart();
     str::print("----------------------------------------------------");
 
     // load mesh from config
-    auto const mesh = createMeshFromConfig(modelConfig["mesh"], path, electrodes, cudaStream);
+    auto const mesh = numeric::IrregularMesh::fromConfig(modelConfig["mesh"], electrodes, cudaStream, path);
 
     str::print("Mesh loaded with", mesh->nodes.rows(), "nodes and", mesh->elements.rows(), "elements");
     str::print("Time:", time.elapsed() * 1e3, "ms");
@@ -81,8 +81,8 @@ int main(int argc, char* argv[]) {
     time.restart();
 
     // Create main model class
-    auto equation = std::make_shared<FEM::Equation<float, FEM::basis::Linear, false>>(
-        mesh, source->electrodes, 1.0, cudaStream);
+    auto forwardModel = std::make_shared<models::EIT<numeric::ConjugateGradient,
+        FEM::Equation<float, FEM::basis::Linear, false>>>(mesh, source, 1.0, 7, cublasHandle, cudaStream);
 
     cudaStreamSynchronize(cudaStream);
     str::print("Time:", time.elapsed() * 1e3, "ms");
@@ -92,8 +92,6 @@ int main(int argc, char* argv[]) {
     str::print("----------------------------------------------------");
     str::print("Create main solver class");
 
-    auto forwardModel = std::make_shared<EIT::ForwardSolver<numeric::ConjugateGradient,
-        typename decltype(equation)::element_type>>(equation, source, 7, cublasHandle, cudaStream);
     auto solver = std::make_shared<solver::Solver<typename decltype(forwardModel)::element_type,
         numeric::ConjugateGradient>>(forwardModel, 1, cublasHandle, cudaStream);
 
@@ -116,8 +114,8 @@ int main(int argc, char* argv[]) {
     Eigen::ArrayXd result = Eigen::ArrayXd::Zero(maxPipelineLenght);
     for (unsigned length = 1; length <= maxPipelineLenght; ++length) {
         // create inverse solver
-        auto forwardModel = std::make_shared<EIT::ForwardSolver<numeric::ConjugateGradient,
-            typename decltype(equation)::element_type>>(equation, source, 7, cublasHandle, cudaStream);
+        auto forwardModel = std::make_shared<models::EIT<numeric::ConjugateGradient,
+            FEM::Equation<float, FEM::basis::Linear, false>>>(mesh, source, 1.0, 7, cublasHandle, cudaStream);
         auto solver = std::make_shared<solver::Solver<typename decltype(forwardModel)::element_type,
             numeric::ConjugateGradient>>(forwardModel, 1, cublasHandle, cudaStream);
         solver->preSolve(cublasHandle, cudaStream);

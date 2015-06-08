@@ -54,23 +54,13 @@ int main(int argc, char* argv[]) {
             FEM::SourceDescriptor<float>::Type::Fixed, 1.0, electrodes,
             drivePattern, measurementPattern, cudaStream);
 
-        // create equation
-        time.restart();
-        str::print("--------------------------");
-        str::print("Create equation model class");
-
-        auto equation = std::make_shared<FEM::Equation<float, FEM::basis::Linear>>(
-            mesh, electrodes, 1.0, cudaStream);
-
-        cudaStreamSynchronize(cudaStream);
-        str::print("Time:", time.elapsed() * 1e3, "ms");
-
         // Create forward solver and solve potential
+        time.restart();
         str::print("--------------------------");
         str::print("Solve electrical potential for all excitations");
 
-        auto forwardSolver = std::make_shared<EIT::ForwardSolver<numeric::BiCGSTAB>>(
-            equation, source, 1, cublasHandle, cudaStream);
+        auto forwardSolver = std::make_shared<models::EIT<numeric::BiCGSTAB>>(
+            mesh, source, 1.0, 1, cublasHandle, cudaStream);
         auto gamma = std::make_shared<numeric::Matrix<float>>(mesh->elements.rows(), 1,
             cudaStream);
 

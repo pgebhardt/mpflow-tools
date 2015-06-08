@@ -30,15 +30,15 @@ void solveForwardModelFromConfig(json_value const& config, std::string const pat
     HighPrecisionTime time;
 
     // Create model helper classes
-    auto const electrodes = createBoundaryDescriptorFromConfig(config["electrodes"],
+    auto const electrodes = FEM::BoundaryDescriptor::fromConfig(config["boundary"],
         config["mesh"]["radius"].u.dbl);
-    auto const source = createSourceFromConfig<dataType>(config["source"], electrodes, cudaStream);
+    auto const source = FEM::SourceDescriptor<dataType>::fromConfig(config["source"], electrodes, cudaStream);
 
     time.restart();
     str::print("----------------------------------------------------");
 
     // load mesh from config
-    auto const mesh = createMeshFromConfig(config["mesh"], path, electrodes, cudaStream);
+    auto const mesh = numeric::IrregularMesh::fromConfig(config["mesh"], electrodes, cudaStream, path);
 
     // load predefined material distribution from file, if path is given
     auto const material = [=](json_value const& material) -> std::shared_ptr<numeric::Matrix<dataType>> {
@@ -61,13 +61,9 @@ void solveForwardModelFromConfig(json_value const& config, std::string const pat
     str::print("Initialize mpFlow forward solver");
     time.restart();
 
-    // Create main model class
-    auto equation = std::make_shared<FEM::Equation<dataType, FEM::basis::Linear, false>>(
-        mesh, source->electrodes, 1.0, cudaStream);
-
     // Create forward solver and solve potential
-    auto forwardSolver = std::make_shared<EIT::ForwardSolver<numericalSolverType,
-        typename decltype(equation)::element_type>>(equation, source,
+    auto forwardSolver = std::make_shared<models::EIT<numericalSolverType,
+        FEM::Equation<dataType, FEM::basis::Linear, false>>>(mesh, source, 1.0,
         std::max(1, (int)config["componentsCount"].u.integer), cublasHandle, cudaStream);
 
     cudaStreamSynchronize(cudaStream);
