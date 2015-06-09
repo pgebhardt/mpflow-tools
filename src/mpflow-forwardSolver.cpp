@@ -29,16 +29,27 @@ void solveForwardModelFromConfig(json_value const& config, std::string const pat
     cublasHandle_t const cublasHandle, cudaStream_t const cudaStream) {
     HighPrecisionTime time;
 
-    // Create model helper classes
-    auto const electrodes = FEM::BoundaryDescriptor::fromConfig(config["boundary"],
-        config["mesh"]["radius"].u.dbl);
-    auto const source = FEM::SourceDescriptor<dataType>::fromConfig(config["source"], electrodes, cudaStream);
-
-    time.restart();
     str::print("----------------------------------------------------");
+    str::print("Load forward solver");
+    time.restart();
 
-    // load mesh from config
-    auto const mesh = numeric::IrregularMesh::fromConfig(config["mesh"], electrodes, cudaStream, path);
+    // Create forward solver and solve potential
+    auto forwardSolver = [=]() {
+        typedef models::EIT<numericalSolverType, FEM::Equation<dataType, FEM::basis::Linear, false>> modelType;
+            
+        try {
+            return modelType::fromConfig(config, cublasHandle, cudaStream, path);
+        }
+        catch (std::exception const& exception) {
+            str::print("Error: Invalid config file");
+            str::print("Error message:", exception.what());
+            
+            return std::shared_ptr<modelType>(nullptr);            
+        }
+    }();
+    if (forwardSolver == nullptr) {
+        return;
+    }
 
     // load predefined material distribution from file, if path is given
     auto const material = [=](json_value const& material) -> std::shared_ptr<numeric::Matrix<dataType>> {
@@ -46,25 +57,13 @@ void solveForwardModelFromConfig(json_value const& config, std::string const pat
             return numeric::Matrix<dataType>::loadtxt(str::format("%s/%s")(path, std::string(material)), cudaStream);
         }
         else if (material.type == json_double) {
-            return std::make_shared<numeric::Matrix<dataType>>(mesh->elements.rows(), 1,
+            return std::make_shared<numeric::Matrix<dataType>>(forwardSolver->mesh->elements.rows(), 1,
                 cudaStream, dataType(material.u.dbl));
         }
         else {
             return nullptr;
         }
     }(config["material"]);
-
-    str::print("Mesh loaded with", mesh->nodes.rows(), "nodes and", mesh->elements.rows(), "elements");
-    str::print("Time:", time.elapsed() * 1e3, "ms");
-
-    str::print("----------------------------------------------------");
-    str::print("Initialize mpFlow forward solver");
-    time.restart();
-
-    // Create forward solver and solve potential
-    auto forwardSolver = std::make_shared<models::EIT<numericalSolverType,
-        FEM::Equation<dataType, FEM::basis::Linear, false>>>(mesh, source, 1.0,
-        std::max(1, (int)config["componentsCount"].u.integer), cublasHandle, cudaStream);
 
     cudaStreamSynchronize(cudaStream);
     str::print("Time:", time.elapsed() * 1e3, "ms");
