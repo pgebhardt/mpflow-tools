@@ -107,12 +107,9 @@ int main(int argc, char* argv[]) {
     }
 
     // init cuda
-    cudaStream_t cudaStream = nullptr;
-    cublasHandle_t cublasHandle = nullptr;
-
     cudaSetDevice(argc <= 2 ? 0 : cudaSetDevice(atoi(argv[2])));
-    cublasCreate(&cublasHandle);
-    cudaStreamCreate(&cudaStream);
+    cudaStream_t const cudaStream = []{ cudaStream_t stream; cudaStreamCreate(&stream); return stream; }();
+    cublasHandle_t const cublasHandle = []{ cublasHandle_t handle; cublasCreate(&handle); return handle; }();
 
     // print out basic system info for reference
     str::print("----------------------------------------------------");

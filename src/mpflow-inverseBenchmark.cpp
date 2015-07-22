@@ -21,12 +21,9 @@ int main(int argc, char* argv[]) {
     int const maxPipelineLenght = argc > 2 ? atoi(argv[2]) : 512;
 
     // init cuda
-    cudaStream_t cudaStream = nullptr;
-    cublasHandle_t cublasHandle = nullptr;
-
     cudaSetDevice(argc <= 3 ? 0 : cudaSetDevice(atoi(argv[3])));
-    cublasCreate(&cublasHandle);
-    cudaStreamCreate(&cudaStream);
+    cudaStream_t const cudaStream = []{ cudaStream_t stream; cudaStreamCreate(&stream); return stream; }();
+    cublasHandle_t const cublasHandle = []{ cublasHandle_t handle; cublasCreate(&handle); return handle; }();
 
     // print out basic system info for reference
     str::print("----------------------------------------------------");

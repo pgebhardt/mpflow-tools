@@ -12,10 +12,8 @@ int main(int argc, char* argv[]) {
     str::print("mpFlow version:", version::getVersionString());
 
     // init cuda
-    cudaStream_t cudaStream = nullptr;
-    cublasHandle_t cublasHandle = nullptr;
-    cublasCreate(&cublasHandle);
-    cudaStreamCreate(&cudaStream);
+    cudaStream_t const cudaStream = []{ cudaStream_t stream; cudaStreamCreate(&stream); return stream; }();
+    cublasHandle_t const cublasHandle = []{ cublasHandle_t handle; cublasCreate(&handle); return handle; }();
 
     // solve complete forward problem for a common ECT measurement setup for increasing
     // mesh density

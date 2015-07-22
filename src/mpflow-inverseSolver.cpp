@@ -22,7 +22,7 @@ std::shared_ptr<numeric::Matrix<thrust::complex<double>>> loadMWIMeasurement(
 
     // fill complex matrix
     unsigned const dim = std::sqrt((floatMatrix->cols - 1) / 2);
-    auto measurement = std::make_shared<numeric::Matrix<thrust::complex<double>>>(
+    auto const measurement = std::make_shared<numeric::Matrix<thrust::complex<double>>>(
         dim, dim, cudaStream);
     for (unsigned row = 0; row < measurement->rows; ++row)
     for (unsigned col = 0; col < measurement->cols; ++col) {
@@ -30,9 +30,9 @@ std::shared_ptr<numeric::Matrix<thrust::complex<double>>> loadMWIMeasurement(
             (*floatMatrix)(frequencyIndex, row * dim * 2 + col * 2 + 2));
     }
 
-    // clear reflection parameters
-    for (unsigned i = 0; i < sqrt(measurement->rows); ++i) {
-        (*measurement)(i * sqrt(measurement->rows) + i, 0) = 0.0;
+    // correct sign of reflection parameters
+    for (unsigned i = 0; i < measurement->rows; ++i) {
+        (*measurement)(i, i) *= -1.0;
     }
     measurement->copyToDevice(cudaStream);
 
@@ -145,10 +145,8 @@ int main(int argc, char* argv[]) {
     }
 
     // init cuda
-    cudaStream_t cudaStream = nullptr;
-    cublasHandle_t cublasHandle = nullptr;
-    cublasCreate(&cublasHandle);
-    cudaStreamCreate(&cudaStream);
+    cudaStream_t const cudaStream = []{ cudaStream_t stream; cudaStreamCreate(&stream); return stream; }();
+    cublasHandle_t const cublasHandle = []{ cublasHandle_t handle; cublasCreate(&handle); return handle; }();
 
     // print out basic system info for reference
     str::print("----------------------------------------------------");
