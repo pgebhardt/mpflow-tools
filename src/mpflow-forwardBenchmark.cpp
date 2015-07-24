@@ -24,9 +24,8 @@ int main(int argc, char* argv[]) {
         str::print("----------------------------------------------------");
         str::print("Create mesh with density:", density);
 
-        auto dist_mesh = distmesh::distmesh(distmesh::distanceFunction::circular(1.0),
+        auto const dist_mesh = distmesh::distmesh(distmesh::distanceFunction::circular(1.0),
             density, 1.0, 1.1 * distmesh::boundingBox(2));
-        auto boundary = distmesh::boundEdges(std::get<1>(dist_mesh));
 
         str::print("Mesh created with", std::get<0>(dist_mesh).rows(), "nodes and",
             std::get<1>(dist_mesh).rows(), "element(s)");
@@ -36,19 +35,19 @@ int main(int argc, char* argv[]) {
         density /= std::sqrt(2.0);
 
         // create mpflow mesh object
-        auto mesh = std::make_shared<numeric::IrregularMesh>(std::get<0>(dist_mesh),
-            std::get<1>(dist_mesh), boundary, 1.0);
+        auto const mesh = std::make_shared<numeric::IrregularMesh>(std::get<0>(dist_mesh),
+            std::get<1>(dist_mesh), 1.0);
 
         // create electrodes
-        auto electrodes = FEM::BoundaryDescriptor::circularBoundary(
+        auto const electrodes = FEM::BoundaryDescriptor::circularBoundary(
             16, 0.03, 0.1, 1.0, 0.0);
 
         // create pattern
-        auto drivePattern = numeric::Matrix<int>::eye(electrodes->count, cudaStream);
-        auto measurementPattern = numeric::Matrix<int>::eye(electrodes->count, cudaStream);
+        auto const drivePattern = numeric::Matrix<int>::eye(electrodes->count, cudaStream);
+        auto const measurementPattern = numeric::Matrix<int>::eye(electrodes->count, cudaStream);
 
         // create source
-        auto source = std::make_shared<FEM::SourceDescriptor<float>>(
+        auto const source = std::make_shared<FEM::SourceDescriptor<float>>(
             FEM::SourceDescriptor<float>::Type::Fixed, 1.0, electrodes,
             drivePattern, measurementPattern, cudaStream);
 
@@ -57,9 +56,9 @@ int main(int argc, char* argv[]) {
         str::print("--------------------------");
         str::print("Solve electrical potential for all excitations");
 
-        auto forwardSolver = std::make_shared<models::EIT<numeric::BiCGSTAB>>(
+        auto const forwardSolver = std::make_shared<models::EIT<numeric::BiCGSTAB>>(
             mesh, source, 1.0, 1, cublasHandle, cudaStream);
-        auto gamma = std::make_shared<numeric::Matrix<float>>(mesh->elements.rows(), 1,
+        auto const gamma = std::make_shared<numeric::Matrix<float>>(mesh->elements.rows(), 1,
             cudaStream);
 
         time.restart();
