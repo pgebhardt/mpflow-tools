@@ -178,7 +178,7 @@ int main(int argc, char* argv[]) {
         str::print("Error: Invalid model config");
         return EXIT_FAILURE;
     }
-
+    
     // extract data type from model config and solve inverse problem
     // use different numerical solver for different source types
     bool constexpr logarithmic = false;
@@ -197,6 +197,10 @@ int main(int argc, char* argv[]) {
                     numeric::ConjugateGradient>(
                     argc, argv, *config, cublasHandle, cudaStream);
             }
+            else {
+                str::print("Error: Invalid model config");
+                return EXIT_FAILURE;
+            }
         }
         else if (std::string(modelConfig["source"]["type"]) == "voltage") {
             if ((modelConfig["numericType"].type == json_none) ||
@@ -211,6 +215,10 @@ int main(int argc, char* argv[]) {
                     models::EIT<numeric::BiCGSTAB, FEM::Equation<thrust::complex<double>, FEM::basis::Linear, logarithmic>>,
                     numeric::BiCGSTAB>(
                     argc, argv, *config, cublasHandle, cudaStream);
+            }
+            else {
+                str::print("Error: Invalid model config");
+                return EXIT_FAILURE;
             }
         }
         else {
