@@ -191,7 +191,7 @@ int main(int argc, char* argv[]) {
                     numeric::ConjugateGradient>(
                     argc, argv, *config, cublasHandle, cudaStream);
             }
-            else if (std::string(modelConfig["numericType"]) == "complex") {
+            else if ((std::string(modelConfig["numericType"]) == "complex") || (std::string(modelConfig["numericType"]) == "halfComplex")) {
                 solveInverseModelFromConfig<
                     models::EIT<numeric::ConjugateGradient, FEM::Equation<thrust::complex<double>, FEM::basis::Linear, logarithmic>>,
                     numeric::ConjugateGradient>(
@@ -210,7 +210,7 @@ int main(int argc, char* argv[]) {
                     numeric::BiCGSTAB>(
                     argc, argv, *config, cublasHandle, cudaStream);
             }
-            else if (std::string(modelConfig["numericType"]) == "complex") {
+            else if ((std::string(modelConfig["numericType"]) == "complex") || (std::string(modelConfig["numericType"]) == "halfComplex")) {
                 solveInverseModelFromConfig<
                     models::EIT<numeric::BiCGSTAB, FEM::Equation<thrust::complex<double>, FEM::basis::Linear, logarithmic>>,
                     numeric::BiCGSTAB>(
