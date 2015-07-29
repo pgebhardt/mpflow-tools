@@ -79,7 +79,8 @@ int main(int argc, char* argv[]) {
 
     // Create main model class
     auto forwardModel = std::make_shared<models::EIT<numeric::ConjugateGradient,
-        FEM::Equation<float, FEM::basis::Linear, false>>>(mesh, source, 1.0, 7, cublasHandle, cudaStream);
+        FEM::Equation<float, FEM::basis::Linear, false>>>(mesh, source, 1.0, modelConfig["mesh"]["height"].u.dbl,
+        7, cublasHandle, cudaStream);
 
     cudaStreamSynchronize(cudaStream);
     str::print("Time:", time.elapsed() * 1e3, "ms");
@@ -112,7 +113,8 @@ int main(int argc, char* argv[]) {
     for (unsigned length = 1; length <= maxPipelineLenght; ++length) {
         // create inverse solver
         auto forwardModel = std::make_shared<models::EIT<numeric::ConjugateGradient,
-            FEM::Equation<float, FEM::basis::Linear, false>>>(mesh, source, 1.0, 7, cublasHandle, cudaStream);
+            FEM::Equation<float, FEM::basis::Linear, false>>>(mesh, source, 1.0, modelConfig["mesh"]["height"].u.dbl,
+            7, cublasHandle, cudaStream);
         auto solver = std::make_shared<solver::Solver<typename decltype(forwardModel)::element_type,
             numeric::ConjugateGradient>>(forwardModel, 1, cublasHandle, cudaStream);
         solver->preSolve(cublasHandle, cudaStream);

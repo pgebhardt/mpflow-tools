@@ -36,7 +36,7 @@ int main(int argc, char* argv[]) {
 
         // create mpflow mesh object
         auto const mesh = std::make_shared<numeric::IrregularMesh>(std::get<0>(dist_mesh),
-            std::get<1>(dist_mesh), 1.0);
+            std::get<1>(dist_mesh));
 
         // create electrodes
         auto const electrodes = FEM::BoundaryDescriptor::circularBoundary(
@@ -56,14 +56,14 @@ int main(int argc, char* argv[]) {
         str::print("--------------------------");
         str::print("Solve electrical potential for all excitations");
 
-        auto const forwardSolver = std::make_shared<models::EIT<numeric::BiCGSTAB>>(
-            mesh, source, 1.0, 1, cublasHandle, cudaStream);
+        auto const forwardModel = std::make_shared<models::EIT<numeric::BiCGSTAB>>(
+            mesh, source, 1.0, 1.0, 1, cublasHandle, cudaStream);
         auto const gamma = std::make_shared<numeric::Matrix<float>>(mesh->elements.rows(), 1,
             cudaStream);
 
         time.restart();
         unsigned steps = 0;
-        forwardSolver->solve(gamma, cublasHandle, cudaStream, &steps);
+        forwardModel->solve(gamma, cublasHandle, cudaStream, &steps);
 
         cudaStreamSynchronize(cudaStream);
         str::print("Time:", time.elapsed() * 1e3, "ms, Steps:", steps);
