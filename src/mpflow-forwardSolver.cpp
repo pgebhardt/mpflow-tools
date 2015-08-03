@@ -153,7 +153,7 @@ int main(int argc, char* argv[]) {
             solveForwardModelFromConfig<double, numeric::ConjugateGradient>(
                 modelConfig, path, cublasHandle, cudaStream);
         }
-        else if (std::string(modelConfig["numericType"]) == "complex") {
+        else if ((std::string(modelConfig["numericType"]) == "complex") || (std::string(modelConfig["numericType"]) == "halfComplex")) {
             solveForwardModelFromConfig<thrust::complex<double>, numeric::ConjugateGradient>(
                 modelConfig, path, cublasHandle, cudaStream);
         }
@@ -164,7 +164,7 @@ int main(int argc, char* argv[]) {
             solveForwardModelFromConfig<double, numeric::BiCGSTAB>(
                 modelConfig, path, cublasHandle, cudaStream);
         }
-        else if (std::string(modelConfig["numericType"]) == "complex") {
+        else if ((std::string(modelConfig["numericType"]) == "complex") || (std::string(modelConfig["numericType"]) == "halfComplex")) {
             solveForwardModelFromConfig<thrust::complex<double>, numeric::BiCGSTAB>(
                 modelConfig, path, cublasHandle, cudaStream);
         }

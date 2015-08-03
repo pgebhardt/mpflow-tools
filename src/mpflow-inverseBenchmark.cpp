@@ -59,19 +59,19 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
 
-    // Create model helper classes
-    auto const electrodes = FEM::BoundaryDescriptor::fromConfig(modelConfig["boundary"],
-        modelConfig["mesh"]["radius"].u.dbl);
-    auto const source = FEM::SourceDescriptor<float>::fromConfig(modelConfig["source"], electrodes, cudaStream);
-
     time.restart();
     str::print("----------------------------------------------------");
 
     // load mesh from config
-    auto const mesh = numeric::IrregularMesh::fromConfig(modelConfig["mesh"], electrodes, cudaStream, path);
+    auto const mesh = numeric::IrregularMesh::fromConfig(modelConfig["mesh"], modelConfig["boundary"], cudaStream, path);
 
     str::print("Mesh loaded with", mesh->nodes.rows(), "nodes and", mesh->elements.rows(), "elements");
     str::print("Time:", time.elapsed() * 1e3, "ms");
+
+    // Create model helper classes
+    auto const electrodes = FEM::BoundaryDescriptor::fromConfig(modelConfig["boundary"],
+        mesh);
+    auto const source = FEM::SourceDescriptor<float>::fromConfig(modelConfig["source"], electrodes, cudaStream);
 
     str::print("----------------------------------------------------");
     str::print("Initialize forward model");
