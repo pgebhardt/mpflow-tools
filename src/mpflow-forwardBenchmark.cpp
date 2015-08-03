@@ -25,7 +25,7 @@ int main(int argc, char* argv[]) {
         str::print("Create mesh with density:", density);
 
         auto const dist_mesh = distmesh::distmesh(distmesh::distanceFunction::circular(1.0),
-            density, 1.0, 1.1 * distmesh::boundingBox(2));
+            density, 1.0, 1.1 * distmesh::utils::boundingBox(2));
 
         str::print("Mesh created with", std::get<0>(dist_mesh).rows(), "nodes and",
             std::get<1>(dist_mesh).rows(), "element(s)");
@@ -40,7 +40,7 @@ int main(int argc, char* argv[]) {
 
         // create electrodes
         auto const electrodes = FEM::BoundaryDescriptor::circularBoundary(
-            16, 0.03, 0.1, 1.0, 0.0);
+            16, 0.03, 0.1, mesh, 0.0);
 
         // create pattern
         auto const drivePattern = numeric::Matrix<int>::eye(electrodes->count, cudaStream);
