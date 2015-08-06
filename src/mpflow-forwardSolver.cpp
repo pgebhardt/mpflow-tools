@@ -30,11 +30,11 @@ void solveForwardModelFromConfig(json_value const& config, std::string const pat
     HighPrecisionTime time;
 
     str::print("----------------------------------------------------");
-    str::print("Load forward solver");
+    str::print("Load forward model");
     time.restart();
 
-    // Create forward solver and solve potential
-    auto forwardSolver = [=]() {
+    // Create forward model and solve potential
+    auto forwardModel = [=]() {
         typedef models::EIT<numericalSolverType, FEM::Equation<dataType, FEM::basis::Linear, false>> modelType;
             
         try {
@@ -47,7 +47,7 @@ void solveForwardModelFromConfig(json_value const& config, std::string const pat
             return std::shared_ptr<modelType>(nullptr);            
         }
     }();
-    if (forwardSolver == nullptr) {
+    if (forwardModel == nullptr) {
         return;
     }
 
@@ -57,8 +57,8 @@ void solveForwardModelFromConfig(json_value const& config, std::string const pat
             return numeric::Matrix<dataType>::loadtxt(str::format("%s/%s")(path, std::string(material)), cudaStream);
         }
         else if (material.type == json_double) {
-            return std::make_shared<numeric::Matrix<dataType>>(forwardSolver->mesh->elements.rows(), 1,
-                cudaStream, dataType(material.u.dbl));
+            return std::make_shared<numeric::Matrix<dataType>>(forwardModel->mesh->elements.rows(), 1,
+                cudaStream, dataType(1.0));
         }
         else {
             return nullptr;
@@ -74,16 +74,16 @@ void solveForwardModelFromConfig(json_value const& config, std::string const pat
 
     // solve forward model
     unsigned steps = 0;
-    auto result = forwardSolver->solve(material, cublasHandle, cudaStream, &steps);
+    auto const result = forwardModel->solve(material, cublasHandle, cudaStream, &steps);
 
     cudaStreamSynchronize(cudaStream);
     str::print("Time:", time.elapsed() * 1e3, "ms");
     str::print("Steps:", steps);
 
     // calculate electrical potential at cross section from 2.5D model
-    auto potential = std::make_shared<numeric::Matrix<dataType>>(forwardSolver->phi[0]->rows,
-        forwardSolver->phi[0]->cols, cudaStream);
-    for (auto const phi : forwardSolver->phi) {
+    auto potential = std::make_shared<numeric::Matrix<dataType>>(forwardModel->phi[0]->rows,
+        forwardModel->phi[0]->cols, cudaStream);
+    for (auto const phi : forwardModel->phi) {
         potential->add(phi, cudaStream);
     }
 
