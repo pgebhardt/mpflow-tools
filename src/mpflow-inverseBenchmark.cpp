@@ -69,17 +69,16 @@ int main(int argc, char* argv[]) {
     str::print("Time:", time.elapsed() * 1e3, "ms");
 
     // Create model helper classes
-    auto const electrodes = FEM::BoundaryDescriptor::fromConfig(modelConfig["boundary"],
-        mesh);
-    auto const source = FEM::SourceDescriptor<float>::fromConfig(modelConfig["source"], electrodes, cudaStream);
+    auto const electrodes = FEM::Ports::fromConfig(modelConfig["boundary"], mesh, cudaStream, path);
+    auto const sources = FEM::Sources<float>::fromConfig(modelConfig["sources"], electrodes, cudaStream);
 
     str::print("----------------------------------------------------");
     str::print("Initialize forward model");
     time.restart();
 
     // Create main model class
-    auto forwardModel = std::make_shared<models::EIT<numeric::ConjugateGradient,
-        FEM::Equation<float, FEM::basis::Linear, false>>>(mesh, source, 1.0, modelConfig["mesh"]["height"].u.dbl,
+    auto const forwardModel = std::make_shared<models::EIT<numeric::ConjugateGradient,
+        FEM::Equation<float, FEM::basis::Linear, false>>>(mesh, sources, 1.0, modelConfig["mesh"]["height"].u.dbl,
         7, cublasHandle, cudaStream);
 
     cudaStreamSynchronize(cudaStream);
@@ -113,7 +112,7 @@ int main(int argc, char* argv[]) {
     for (unsigned length = 1; length <= maxPipelineLenght; ++length) {
         // create inverse solver
         auto forwardModel = std::make_shared<models::EIT<numeric::ConjugateGradient,
-            FEM::Equation<float, FEM::basis::Linear, false>>>(mesh, source, 1.0, modelConfig["mesh"]["height"].u.dbl,
+            FEM::Equation<float, FEM::basis::Linear, false>>>(mesh, sources, 1.0, modelConfig["mesh"]["height"].u.dbl,
             7, cublasHandle, cudaStream);
         auto solver = std::make_shared<solver::Solver<typename decltype(forwardModel)::element_type,
             numeric::ConjugateGradient>>(forwardModel, 1, cublasHandle, cudaStream);
