@@ -56,9 +56,9 @@ void solveForwardModelFromConfig(json_value const& config, std::string const pat
         if (material.type == json_string) {
             return numeric::Matrix<dataType>::loadtxt(str::format("%s/%s")(path, std::string(material)), cudaStream);
         }
-        else if (material.type == json_double) {
+        else if ((material.type == json_double) || (material.type == json_array)) {
             return std::make_shared<numeric::Matrix<dataType>>(forwardModel->mesh->elements.rows(), 1,
-                cudaStream, dataType(1.0));
+                cudaStream, dataType(1));
         }
         else {
             return nullptr;
