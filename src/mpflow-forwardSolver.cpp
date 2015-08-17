@@ -1,6 +1,9 @@
 #include <fstream>
 #include <distmesh/distmesh.h>
+
+#include "json.h"
 #include <mpflow/mpflow.h>
+
 #include "stringtools/all.hpp"
 #include "high_precision_time.h"
 #include "helper.h"

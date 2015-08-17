@@ -1,9 +1,11 @@
 #include <fstream>
 #include <distmesh/distmesh.h>
+
+#include "json.h"
 #include <mpflow/mpflow.h>
+
 #include "stringtools/all.hpp"
 #include "high_precision_time.h"
-#include "json.h"
 #include "helper.h"
 
 using namespace mpFlow;
@@ -120,7 +122,27 @@ void solveInverseModelFromConfig(int argc, char* argv[], json_value const& confi
         cudaStreamSynchronize(cudaStream);
         time.restart();
 
-        solver->solveAbsolute(newtonSteps, cublasHandle, cudaStream);
+        for (unsigned step = 0; step < newtonSteps; ++step) {
+            solver->solveAbsolute(1, cublasHandle, cudaStream);
+            
+            solver->materialDistribution->copyToHost(cudaStream);
+            cudaStreamSynchronize(cudaStream);
+            
+            // calculate some metrices
+            auto const temp = std::make_shared<numeric::Matrix<dataType>>(solver->measurement[0]->rows,
+                solver->measurement[0]->cols, cudaStream);
+            temp->copy(solver->measurement[0], cudaStream);
+            temp->copyToHost(cudaStream);
+            solver->forwardModel->result->copyToHost(cudaStream);
+            cudaStreamSynchronize(cudaStream);
+            
+            auto const temp2 = solver->materialDistribution->toEigen();
+            str::print("step:", step,
+                "difference:", sqrt((temp->toEigen() - solver->forwardModel->result->toEigen()).abs().square().sum()),
+                "max:", str::format("(%f,%f)")(temp2.real().maxCoeff(), temp2.imag().maxCoeff()),
+                "mean:", temp2.sum() / typename typeTraits::convertComplexType<dataType>::type(temp2.size()),
+                "min:", str::format("(%f,%f)")(temp2.real().minCoeff(), temp2.imag().minCoeff()));
+        }
         
         cudaStreamSynchronize(cudaStream);
         str::print("Time:", time.elapsed() * 1e3, "ms");                        
@@ -157,9 +179,6 @@ int main(int argc, char* argv[]) {
     printCudaDeviceProperties();
     str::print("----------------------------------------------------");
     str::print("Config file:", argv[1]);
-
-    str::print("----------------------------------------------------");
-    str::print("Load model from config file:", argv[1]);
 
     std::ifstream file(argv[1]);
     std::string const fileContent((std::istreambuf_iterator<char>(file)),
