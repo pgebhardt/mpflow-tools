@@ -1,6 +1,9 @@
 #include <fstream>
 #include <distmesh/distmesh.h>
+
+#include "json.h"
 #include <mpflow/mpflow.h>
+
 #include "stringtools/all.hpp"
 #include "high_precision_time.h"
 #include "helper.h"
@@ -63,13 +66,13 @@ int main(int argc, char* argv[]) {
     str::print("----------------------------------------------------");
 
     // load mesh from config
-    auto const mesh = numeric::IrregularMesh::fromConfig(modelConfig["mesh"], modelConfig["boundary"], cudaStream, path);
+    auto const mesh = numeric::IrregularMesh::fromConfig(modelConfig["mesh"], modelConfig["ports"], cudaStream, path);
 
     str::print("Mesh loaded with", mesh->nodes.rows(), "nodes and", mesh->elements.rows(), "elements");
     str::print("Time:", time.elapsed() * 1e3, "ms");
 
     // Create model helper classes
-    auto const electrodes = FEM::Ports::fromConfig(modelConfig["boundary"], mesh, cudaStream, path);
+    auto const electrodes = FEM::Ports::fromConfig(modelConfig["ports"], mesh, cudaStream, path);
     auto const sources = FEM::Sources<float>::fromConfig(modelConfig["sources"], electrodes, cudaStream);
 
     str::print("----------------------------------------------------");
@@ -78,8 +81,8 @@ int main(int argc, char* argv[]) {
 
     // Create main model class
     auto const forwardModel = std::make_shared<models::EIT<numeric::ConjugateGradient,
-        FEM::Equation<float, FEM::basis::Linear, false>>>(mesh, sources, 1.0, modelConfig["mesh"]["height"].u.dbl,
-        7, cublasHandle, cudaStream);
+        FEM::Equation<float, FEM::basis::Linear, false>>>(mesh, sources, 1.0, cublasHandle, cudaStream,
+        7, modelConfig["mesh"]["height"].u.dbl);
 
     cudaStreamSynchronize(cudaStream);
     str::print("Time:", time.elapsed() * 1e3, "ms");
@@ -112,8 +115,8 @@ int main(int argc, char* argv[]) {
     for (unsigned length = 1; length <= maxPipelineLenght; ++length) {
         // create inverse solver
         auto forwardModel = std::make_shared<models::EIT<numeric::ConjugateGradient,
-            FEM::Equation<float, FEM::basis::Linear, false>>>(mesh, sources, 1.0, modelConfig["mesh"]["height"].u.dbl,
-            7, cublasHandle, cudaStream);
+            FEM::Equation<float, FEM::basis::Linear, false>>>(mesh, sources, 1.0, cublasHandle, cudaStream,
+            7, modelConfig["mesh"]["height"].u.dbl);
         auto solver = std::make_shared<solver::Solver<typename decltype(forwardModel)::element_type,
             numeric::ConjugateGradient>>(forwardModel, 1, cublasHandle, cudaStream);
         solver->preSolve(cublasHandle, cudaStream);
