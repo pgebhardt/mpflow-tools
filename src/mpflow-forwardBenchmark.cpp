@@ -40,7 +40,7 @@ int main(int argc, char* argv[]) {
 
         // create electrodes
         auto const electrodes = FEM::Ports::circularBoundary(
-            16, 0.03, 0.1, mesh, 0.0);
+            16, 0.03, mesh, 0.0);
 
         // create pattern
         auto const drivePattern = numeric::Matrix<int>::eye(electrodes->count, cudaStream);
@@ -57,7 +57,7 @@ int main(int argc, char* argv[]) {
         str::print("Solve electrical potential for all excitations");
 
         auto const forwardModel = std::make_shared<models::EIT<numeric::BiCGSTAB>>(
-            mesh, sources, 1.0, 1.0, 1, cublasHandle, cudaStream);
+            mesh, sources, 1.0, cublasHandle, cudaStream, 1, 1.0, 0.1);
         auto const gamma = std::make_shared<numeric::Matrix<float>>(mesh->elements.rows(), 1,
             cudaStream);
 
