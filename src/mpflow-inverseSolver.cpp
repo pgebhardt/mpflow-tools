@@ -46,7 +46,7 @@ void solveInverseModelFromConfig(int argc, char* argv[], json_value const& confi
     str::print("----------------------------------------------------");
     str::print("Create and initialize solver");
 
-    auto solver = solver::Solver<forwardModelType, numericalSolverType>::fromConfig(
+    auto const solver = solver::Solver<forwardModelType, numericalSolverType>::fromConfig(
         config, cublasHandle, cudaStream, path);
     if (solver == nullptr) {
         str::print("Could not create solver from config");
@@ -170,54 +170,39 @@ int main(int argc, char* argv[]) {
     // extract data type from model config and solve inverse problem
     // use different numerical solver for different source types
     if (modelConfig["jacobian"].type == json_none) {
-        if (std::string(modelConfig["source"]["type"]) == "current") {
-            if ((modelConfig["numericType"].type == json_none) ||
-                (std::string(modelConfig["numericType"]) == "real")) {
-                solveInverseModelFromConfig<
-                    models::EIT<numeric::ConjugateGradient, FEM::Equation<double, FEM::basis::Linear>>,
-                    numeric::ConjugateGradient>(argc, argv, *config, cublasHandle, cudaStream);
-            }
-            else if ((std::string(modelConfig["numericType"]) == "complex") || (std::string(modelConfig["numericType"]) == "halfComplex")) {
-                solveInverseModelFromConfig<
-                    models::EIT<numeric::ConjugateGradient, FEM::Equation<thrust::complex<double>, FEM::basis::Linear>>,
-                    numeric::ConjugateGradient>(argc, argv, *config, cublasHandle, cudaStream);
-            }
-            else {
-                str::print("Error: Invalid model config");
-                return EXIT_FAILURE;
-            }
-        }
-        else if (std::string(modelConfig["source"]["type"]) == "voltage") {
-            if ((modelConfig["numericType"].type == json_none) ||
-                (std::string(modelConfig["numericType"]) == "real")) {
-                solveInverseModelFromConfig<
-                    models::EIT<numeric::BiCGSTAB, FEM::Equation<double, FEM::basis::Linear>>,
-                    numeric::BiCGSTAB>(argc, argv, *config, cublasHandle, cudaStream);
-            }
-            else if ((std::string(modelConfig["numericType"]) == "complex") || (std::string(modelConfig["numericType"]) == "halfComplex")) {
+        if (std::string(modelConfig["source"]["type"]) == "voltage") {
+            if ((std::string(modelConfig["numericType"]) == "complex") || (std::string(modelConfig["numericType"]) == "halfComplex")) {
                 solveInverseModelFromConfig<
                     models::EIT<numeric::BiCGSTAB, FEM::Equation<thrust::complex<double>, FEM::basis::Linear>>,
                     numeric::BiCGSTAB>(argc, argv, *config, cublasHandle, cudaStream);
             }
             else {
-                str::print("Error: Invalid model config");
-                return EXIT_FAILURE;
+                solveInverseModelFromConfig<
+                    models::EIT<numeric::BiCGSTAB, FEM::Equation<double, FEM::basis::Linear>>,
+                    numeric::BiCGSTAB>(argc, argv, *config, cublasHandle, cudaStream);
             }
         }
         else {
-            str::print("Error: Invalid model config");
-            return EXIT_FAILURE;
+            if ((std::string(modelConfig["numericType"]) == "complex") || (std::string(modelConfig["numericType"]) == "halfComplex")) {
+                solveInverseModelFromConfig<
+                    models::EIT<numeric::ConjugateGradient, FEM::Equation<thrust::complex<double>, FEM::basis::Linear>>,
+                    numeric::ConjugateGradient>(argc, argv, *config, cublasHandle, cudaStream);
+            }
+            else {
+                solveInverseModelFromConfig<
+                    models::EIT<numeric::ConjugateGradient, FEM::Equation<double, FEM::basis::Linear>>,
+                    numeric::ConjugateGradient>(argc, argv, *config, cublasHandle, cudaStream);
+            }
         }
     }
     else {
-        if ((modelConfig["numericType"].type == json_none) ||
-            (std::string(modelConfig["numericType"]) == "real")) {
-            solveInverseModelFromConfig<models::Constant<double>, numeric::BiCGSTAB>(
-                argc, argv, *config, cublasHandle, cudaStream);
-        }
-        else if (std::string(modelConfig["numericType"]) == "complex") {
+        if (std::string(modelConfig["numericType"]) == "complex") {
             solveInverseModelFromConfig<models::Constant<thrust::complex<double>>, numeric::BiCGSTAB>(
                 argc, argv, *config, cublasHandle, cudaStream);
+        }
+        else {
+            solveInverseModelFromConfig<models::Constant<double>, numeric::BiCGSTAB>(
+                argc, argv, *config, cublasHandle, cudaStream);            
         }
     }
 

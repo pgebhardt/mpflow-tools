@@ -84,7 +84,7 @@ void solveForwardModelFromConfig(json_value const& config, std::string const pat
     str::print("Steps:", steps);
 
     // calculate electrical potential at cross section from 2.5D model
-    auto potential = std::make_shared<numeric::Matrix<dataType>>(forwardModel->phi[0]->rows,
+    auto const potential = std::make_shared<numeric::Matrix<dataType>>(forwardModel->phi[0]->rows,
         forwardModel->phi[0]->cols, cudaStream);
     for (auto const phi : forwardModel->phi) {
         potential->add(phi, cudaStream);
@@ -150,31 +150,25 @@ int main(int argc, char* argv[]) {
 
     // extract data type from model config and solve forward model
     // use different numerical solver for different source types
-    if (std::string(modelConfig["source"]["type"]) == "current") {
-        if ((modelConfig["numericType"].type == json_none) ||
-            (std::string(modelConfig["numericType"]) == "real")) {
-            solveForwardModelFromConfig<double, numeric::ConjugateGradient>(
-                modelConfig, path, cublasHandle, cudaStream);
-        }
-        else if ((std::string(modelConfig["numericType"]) == "complex") || (std::string(modelConfig["numericType"]) == "halfComplex")) {
-            solveForwardModelFromConfig<thrust::complex<double>, numeric::ConjugateGradient>(
-                modelConfig, path, cublasHandle, cudaStream);
-        }
-    }
-    else if (std::string(modelConfig["source"]["type"]) == "voltage") {
-        if ((modelConfig["numericType"].type == json_none) ||
-            (std::string(modelConfig["numericType"]) == "real")) {
-            solveForwardModelFromConfig<double, numeric::BiCGSTAB>(
-                modelConfig, path, cublasHandle, cudaStream);
-        }
-        else if ((std::string(modelConfig["numericType"]) == "complex") || (std::string(modelConfig["numericType"]) == "halfComplex")) {
+    if (std::string(modelConfig["source"]["type"]) == "voltage") {
+        if ((std::string(modelConfig["numericType"]) == "complex") || (std::string(modelConfig["numericType"]) == "halfComplex")) {
             solveForwardModelFromConfig<thrust::complex<double>, numeric::BiCGSTAB>(
                 modelConfig, path, cublasHandle, cudaStream);
         }
+        else {
+            solveForwardModelFromConfig<double, numeric::BiCGSTAB>(
+                modelConfig, path, cublasHandle, cudaStream);            
+        }
     }
     else {
-        str::print("Error: Invalid model config");
-        return EXIT_FAILURE;
+        if ((std::string(modelConfig["numericType"]) == "complex") || (std::string(modelConfig["numericType"]) == "halfComplex")) {
+            solveForwardModelFromConfig<thrust::complex<double>, numeric::ConjugateGradient>(
+                modelConfig, path, cublasHandle, cudaStream);
+        }
+        else {
+            solveForwardModelFromConfig<double, numeric::ConjugateGradient>(
+                modelConfig, path, cublasHandle, cudaStream);            
+        }
     }
 
     // cleanup
