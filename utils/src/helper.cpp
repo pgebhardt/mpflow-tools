@@ -4,6 +4,69 @@
 #include "stringtools/all.hpp"
 #include "helper.h"
 
+using namespace mpFlow;
+
+template <class dataType>
+std::shared_ptr<numeric::Matrix<dataType>> loadMWIMeasurement(
+    std::string const filename, unsigned const frequencyIndex, cudaStream_t const cudaStream) {
+    return nullptr;
+}
+
+template std::shared_ptr<numeric::Matrix<float>> loadMWIMeasurement<float>(
+    std::string const, unsigned const, cudaStream_t const);
+template std::shared_ptr<numeric::Matrix<double>> loadMWIMeasurement<double>(
+    std::string const, unsigned const, cudaStream_t const);
+
+template <>
+std::shared_ptr<numeric::Matrix<thrust::complex<float>>> loadMWIMeasurement(
+    std::string const filename, unsigned const frequencyIndex, cudaStream_t const cudaStream) {
+    // load float representation
+    auto const floatMatrix = numeric::Matrix<float>::loadtxt(filename, cudaStream, ',');
+
+    // fill complex matrix
+    unsigned const dim = std::sqrt((floatMatrix->cols - 1) / 2);
+    auto const measurement = std::make_shared<numeric::Matrix<thrust::complex<float>>>(
+        dim, dim, cudaStream);
+    for (unsigned row = 0; row < measurement->rows; ++row)
+    for (unsigned col = 0; col < measurement->cols; ++col) {
+        (*measurement)(row, col) = thrust::complex<float>((*floatMatrix)(frequencyIndex, row * dim * 2 + col * 2 + 1),
+            (*floatMatrix)(frequencyIndex, row * dim * 2 + col * 2 + 2));
+    }
+
+    // correct sign of reflection parameters
+    for (unsigned i = 0; i < measurement->rows; ++i) {
+        (*measurement)(i, i) *= -1.0;
+    }
+    measurement->copyToDevice(cudaStream);
+
+    return measurement;
+}
+
+template <>
+std::shared_ptr<numeric::Matrix<thrust::complex<double>>> loadMWIMeasurement(
+    std::string const filename, unsigned const frequencyIndex, cudaStream_t const cudaStream) {
+    // load float representation
+    auto const floatMatrix = numeric::Matrix<double>::loadtxt(filename, cudaStream, ',');
+
+    // fill complex matrix
+    unsigned const dim = std::sqrt((floatMatrix->cols - 1) / 2);
+    auto const measurement = std::make_shared<numeric::Matrix<thrust::complex<double>>>(
+        dim, dim, cudaStream);
+    for (unsigned row = 0; row < measurement->rows; ++row)
+    for (unsigned col = 0; col < measurement->cols; ++col) {
+        (*measurement)(row, col) = thrust::complex<double>((*floatMatrix)(frequencyIndex, row * dim * 2 + col * 2 + 1),
+            (*floatMatrix)(frequencyIndex, row * dim * 2 + col * 2 + 2));
+    }
+
+    // correct sign of reflection parameters
+    for (unsigned i = 0; i < measurement->rows; ++i) {
+        (*measurement)(i, i) *= -1.0;
+    }
+    measurement->copyToDevice(cudaStream);
+
+    return measurement;
+}
+
 // Beginning of GPU Architecture definitions
 inline int _ConvertSMVer2Cores(int major, int minor)
 {
