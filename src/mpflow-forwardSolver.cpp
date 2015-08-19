@@ -25,11 +25,11 @@ void printResult(std::shared_ptr<numeric::Matrix<thrust::complex<dataType>> cons
 }
 
 template <
-    class dataType,
-    template <class> class numericalSolverType
+    class modelType
 >
 void solveForwardModelFromConfig(json_value const& config, std::string const path,
     cublasHandle_t const cublasHandle, cudaStream_t const cudaStream) {
+    typedef typename modelType::dataType dataType;
     HighPrecisionTime time;
 
     str::print("----------------------------------------------------");
@@ -37,9 +37,7 @@ void solveForwardModelFromConfig(json_value const& config, std::string const pat
     time.restart();
 
     // Create forward model and solve potential
-    auto forwardModel = [=]() {
-        typedef models::EIT<numericalSolverType, FEM::Equation<dataType, FEM::basis::Linear, false>> modelType;
-            
+    auto const forwardModel = [=]() {
         try {
             return modelType::fromConfig(config, cublasHandle, cudaStream, path);
         }
@@ -59,12 +57,12 @@ void solveForwardModelFromConfig(json_value const& config, std::string const pat
         if (material.type == json_string) {
             return numeric::Matrix<dataType>::loadtxt(str::format("%s/%s")(path, std::string(material)), cudaStream);
         }
-        else if ((material.type == json_double) || (material.type == json_array)) {
-            return std::make_shared<numeric::Matrix<dataType>>(forwardModel->mesh->elements.rows(), 1,
-                cudaStream, dataType(1));
+        else if ((material.type == json_object) && (material["distribution"].type == json_string)) {
+            return numeric::Matrix<dataType>::loadtxt(str::format("%s/%s")(path, std::string(material["distribution"])), cudaStream);            
         }
         else {
-            return nullptr;
+            return std::make_shared<numeric::Matrix<dataType>>(forwardModel->mesh->elements.rows(), 1,
+                cudaStream, dataType(1));
         }
     }(config["material"]);
 
@@ -83,23 +81,22 @@ void solveForwardModelFromConfig(json_value const& config, std::string const pat
     str::print("Time:", time.elapsed() * 1e3, "ms");
     str::print("Steps:", steps);
 
-    // calculate electrical potential at cross section from 2.5D model
-    auto const potential = std::make_shared<numeric::Matrix<dataType>>(forwardModel->phi[0]->rows,
-        forwardModel->phi[0]->cols, cudaStream);
-    for (auto const phi : forwardModel->phi) {
-        potential->add(phi, cudaStream);
-    }
-
+    auto const temp = std::make_shared<numeric::Matrix<dataType>>(forwardModel->jacobian->rows,
+        forwardModel->jacobian->cols, cudaStream);
+    temp->copy(forwardModel->jacobian, cudaStream);
+    
     // Print and save results
     result->copyToHost(cudaStream);
-    potential->copyToHost(cudaStream);
+    forwardModel->field->copyToHost(cudaStream);
+    temp->copyToHost(cudaStream);
     cudaStreamSynchronize(cudaStream);
 
     str::print("----------------------------------------------------");
     str::print("Result:");
     printResult(result);
     result->savetxt(str::format("%s/result.txt")(path));
-    potential->savetxt(str::format("%s/potential.txt")(path));
+    forwardModel->field->savetxt(str::format("%s/field.txt")(path));
+    temp->savetxt(str::format("%s/jacobian.txt")(path));
 }
 
 int main(int argc, char* argv[]) {
@@ -150,25 +147,31 @@ int main(int argc, char* argv[]) {
 
     // extract data type from model config and solve forward model
     // use different numerical solver for different source types
-    if (std::string(modelConfig["source"]["type"]) == "voltage") {
-        if ((std::string(modelConfig["numericType"]) == "complex") || (std::string(modelConfig["numericType"]) == "halfComplex")) {
-            solveForwardModelFromConfig<thrust::complex<double>, numeric::BiCGSTAB>(
-                modelConfig, path, cublasHandle, cudaStream);
-        }
-        else {
-            solveForwardModelFromConfig<double, numeric::BiCGSTAB>(
-                modelConfig, path, cublasHandle, cudaStream);            
-        }
+    if ((std::string(modelConfig["type"]) == "MWI") || (std::string(modelConfig["type"]) == "mwi")) {
+        solveForwardModelFromConfig<models::MWI<numeric::CPUSolver, FEM::Equation<thrust::complex<double>, FEM::basis::Edge, false>>>(
+            modelConfig, path, cublasHandle, cudaStream);            
     }
     else {
-        if ((std::string(modelConfig["numericType"]) == "complex") || (std::string(modelConfig["numericType"]) == "halfComplex")) {
-            solveForwardModelFromConfig<thrust::complex<double>, numeric::ConjugateGradient>(
-                modelConfig, path, cublasHandle, cudaStream);
+        if (std::string(modelConfig["source"]["type"]) == "voltage") {
+            if ((std::string(modelConfig["numericType"]) == "complex") || (std::string(modelConfig["numericType"]) == "halfComplex")) {
+                solveForwardModelFromConfig<models::EIT<numeric::BiCGSTAB, FEM::Equation<thrust::complex<double>, FEM::basis::Linear, false>>>(
+                    modelConfig, path, cublasHandle, cudaStream);
+            }
+            else {
+                solveForwardModelFromConfig<models::EIT<numeric::BiCGSTAB, FEM::Equation<double, FEM::basis::Linear, false>>>(
+                    modelConfig, path, cublasHandle, cudaStream);            
+            }
         }
         else {
-            solveForwardModelFromConfig<double, numeric::ConjugateGradient>(
-                modelConfig, path, cublasHandle, cudaStream);            
-        }
+            if ((std::string(modelConfig["numericType"]) == "complex") || (std::string(modelConfig["numericType"]) == "halfComplex")) {
+                solveForwardModelFromConfig<models::EIT<numeric::ConjugateGradient, FEM::Equation<thrust::complex<double>, FEM::basis::Linear, false>>>(
+                    modelConfig, path, cublasHandle, cudaStream);
+            }
+            else {
+                solveForwardModelFromConfig<models::EIT<numeric::ConjugateGradient, FEM::Equation<double, FEM::basis::Linear, false>>>(
+                    modelConfig, path, cublasHandle, cudaStream);            
+            }
+        }        
     }
 
     // cleanup

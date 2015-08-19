@@ -20,51 +20,55 @@ template std::shared_ptr<numeric::Matrix<double>> loadMWIMeasurement<double>(
 template <>
 std::shared_ptr<numeric::Matrix<thrust::complex<float>>> loadMWIMeasurement(
     std::string const filename, unsigned const frequencyIndex, cudaStream_t const cudaStream) {
-    // load float representation
+    // load double representation
     auto const floatMatrix = numeric::Matrix<float>::loadtxt(filename, cudaStream, ',');
 
-    // fill complex matrix
-    unsigned const dim = std::sqrt((floatMatrix->cols - 1) / 2);
-    auto const measurement = std::make_shared<numeric::Matrix<thrust::complex<float>>>(
-        dim, dim, cudaStream);
-    for (unsigned row = 0; row < measurement->rows; ++row)
-    for (unsigned col = 0; col < measurement->cols; ++col) {
-        (*measurement)(row, col) = thrust::complex<float>((*floatMatrix)(frequencyIndex, row * dim * 2 + col * 2 + 1),
+    // convert to complex array
+    unsigned const dim = sqrt((floatMatrix->cols - 1) / 2);
+    Eigen::ArrayXXcf measurement(dim, dim);
+    for (unsigned row = 0; row < measurement.rows(); ++row)
+    for (unsigned col = 0; col < measurement.cols(); ++col) {
+        measurement(row, col) = std::complex<float>(
+            (*floatMatrix)(frequencyIndex, row * dim * 2 + col * 2 + 1),
             (*floatMatrix)(frequencyIndex, row * dim * 2 + col * 2 + 2));
     }
 
-    // correct sign of reflection parameters
-    for (unsigned i = 0; i < measurement->rows; ++i) {
-        (*measurement)(i, i) *= -1.0;
-    }
-    measurement->copyToDevice(cudaStream);
+    // convert scattering parameter to field data
+    double const fc = (constants::c0 / std::sqrt(3.1)) / (2.0 * 0.152);
+    double const Z0 = std::sqrt(constants::mu0 / (constants::epsilon0 * 3.1));
+    double const Zw = Z0 / std::sqrt(1.0 - math::square(fc / ((*floatMatrix)(frequencyIndex, 0) * 1e9)));
+    
+    Eigen::ArrayXXcf const fields = (Eigen::MatrixXcf::Identity(dim, dim).array() + measurement) * Zw * 
+        (-2.0 * Eigen::MatrixXcf::Identity(dim, dim).array() + Eigen::ArrayXXcf::Ones(dim, dim));
 
-    return measurement;
+    return numeric::Matrix<thrust::complex<float>>::fromEigen(fields, cudaStream);
 }
 
 template <>
 std::shared_ptr<numeric::Matrix<thrust::complex<double>>> loadMWIMeasurement(
     std::string const filename, unsigned const frequencyIndex, cudaStream_t const cudaStream) {
-    // load float representation
+    // load double representation
     auto const floatMatrix = numeric::Matrix<double>::loadtxt(filename, cudaStream, ',');
 
-    // fill complex matrix
-    unsigned const dim = std::sqrt((floatMatrix->cols - 1) / 2);
-    auto const measurement = std::make_shared<numeric::Matrix<thrust::complex<double>>>(
-        dim, dim, cudaStream);
-    for (unsigned row = 0; row < measurement->rows; ++row)
-    for (unsigned col = 0; col < measurement->cols; ++col) {
-        (*measurement)(row, col) = thrust::complex<double>((*floatMatrix)(frequencyIndex, row * dim * 2 + col * 2 + 1),
+    // convert to complex array
+    unsigned const dim = sqrt((floatMatrix->cols - 1) / 2);
+    Eigen::ArrayXXcd measurement(dim, dim);
+    for (unsigned row = 0; row < measurement.rows(); ++row)
+    for (unsigned col = 0; col < measurement.cols(); ++col) {
+        measurement(row, col) = std::complex<double>(
+            (*floatMatrix)(frequencyIndex, row * dim * 2 + col * 2 + 1),
             (*floatMatrix)(frequencyIndex, row * dim * 2 + col * 2 + 2));
     }
 
-    // correct sign of reflection parameters
-    for (unsigned i = 0; i < measurement->rows; ++i) {
-        (*measurement)(i, i) *= -1.0;
-    }
-    measurement->copyToDevice(cudaStream);
+    // convert scattering parameter to field data
+    double const fc = (constants::c0 / std::sqrt(3.1)) / (2.0 * 0.152);
+    double const Z0 = std::sqrt(constants::mu0 / (constants::epsilon0 * 3.1));
+    double const Zw = Z0 / std::sqrt(1.0 - math::square(fc / ((*floatMatrix)(frequencyIndex, 0) * 1e9)));
+    
+    Eigen::ArrayXXcd const fields = (Eigen::MatrixXcd::Identity(dim, dim).array() + measurement) * Zw * 
+        (-2.0 * Eigen::MatrixXcd::Identity(dim, dim).array() + Eigen::ArrayXXcd::Ones(dim, dim));
 
-    return measurement;
+    return numeric::Matrix<thrust::complex<double>>::fromEigen(fields, cudaStream);
 }
 
 // Beginning of GPU Architecture definitions
