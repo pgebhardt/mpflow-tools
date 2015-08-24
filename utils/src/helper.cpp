@@ -38,7 +38,7 @@ std::shared_ptr<numeric::Matrix<thrust::complex<float>>> loadMWIMeasurement(
     double const Z0 = std::sqrt(constants::mu0 / (constants::epsilon0 * 3.1));
     double const Zw = Z0 / std::sqrt(1.0 - math::square(fc / ((*floatMatrix)(frequencyIndex, 0) * 1e9)));
     
-    Eigen::ArrayXXcf const fields = (Eigen::MatrixXcf::Identity(dim, dim).array() + measurement) * Zw * 
+    Eigen::ArrayXXcf const fields = (Eigen::MatrixXcf::Identity(dim, dim).array() + measurement) * Zw / (2.0 * 0.016) *
         (-2.0 * Eigen::MatrixXcf::Identity(dim, dim).array() + Eigen::ArrayXXcf::Ones(dim, dim));
 
     return numeric::Matrix<thrust::complex<float>>::fromEigen(fields, cudaStream);
@@ -65,7 +65,7 @@ std::shared_ptr<numeric::Matrix<thrust::complex<double>>> loadMWIMeasurement(
     double const Z0 = std::sqrt(constants::mu0 / (constants::epsilon0 * 3.1));
     double const Zw = Z0 / std::sqrt(1.0 - math::square(fc / ((*floatMatrix)(frequencyIndex, 0) * 1e9)));
     
-    Eigen::ArrayXXcd const fields = (Eigen::MatrixXcd::Identity(dim, dim).array() + measurement) * Zw * 
+    Eigen::ArrayXXcd const fields = (Eigen::MatrixXcd::Identity(dim, dim).array() + measurement) * Zw / (2.0 * 0.016) *
         (-2.0 * Eigen::MatrixXcd::Identity(dim, dim).array() + Eigen::ArrayXXcd::Ones(dim, dim));
 
     return numeric::Matrix<thrust::complex<double>>::fromEigen(fields, cudaStream);

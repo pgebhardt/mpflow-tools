@@ -51,7 +51,7 @@ void solveForwardModelFromConfig(json_value const& config, std::string const pat
     if (forwardModel == nullptr) {
         return;
     }
-
+    
     // load predefined material distribution from file, if path is given
     auto const material = [=](json_value const& material) -> std::shared_ptr<numeric::Matrix<dataType>> {
         if (material.type == json_string) {
@@ -81,14 +81,9 @@ void solveForwardModelFromConfig(json_value const& config, std::string const pat
     str::print("Time:", time.elapsed() * 1e3, "ms");
     str::print("Steps:", steps);
 
-    auto const temp = std::make_shared<numeric::Matrix<dataType>>(forwardModel->jacobian->rows,
-        forwardModel->jacobian->cols, cudaStream);
-    temp->copy(forwardModel->jacobian, cudaStream);
-    
     // Print and save results
     result->copyToHost(cudaStream);
     forwardModel->field->copyToHost(cudaStream);
-    temp->copyToHost(cudaStream);
     cudaStreamSynchronize(cudaStream);
 
     str::print("----------------------------------------------------");
@@ -96,7 +91,6 @@ void solveForwardModelFromConfig(json_value const& config, std::string const pat
     printResult(result);
     result->savetxt(str::format("%s/result.txt")(path));
     forwardModel->field->savetxt(str::format("%s/field.txt")(path));
-    temp->savetxt(str::format("%s/jacobian.txt")(path));
 }
 
 int main(int argc, char* argv[]) {
@@ -147,7 +141,7 @@ int main(int argc, char* argv[]) {
 
     // extract data type from model config and solve forward model
     // use different numerical solver for different source types
-    if ((std::string(modelConfig["type"]) == "MWI") || (std::string(modelConfig["type"]) == "mwi")) {
+    if (modelConfig["mwi"].type != json_none) {
         solveForwardModelFromConfig<models::MWI<numeric::CPUSolver, FEM::Equation<thrust::complex<double>, FEM::basis::Edge, false>>>(
             modelConfig, path, cublasHandle, cudaStream);            
     }

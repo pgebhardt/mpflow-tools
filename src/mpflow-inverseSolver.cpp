@@ -26,7 +26,7 @@ void solveInverseModelFromConfig(int argc, char* argv[], json_value const& confi
 
     // load measurement and reference data
     std::shared_ptr<numeric::Matrix<dataType>> reference = nullptr, measurement = nullptr;
-    if ((std::string(config["model"]["type"]) == "MWI") || (std::string(config["model"]["type"]) == "mwi")) {
+    if (config["model"]["mwi"].type != json_none) {
         reference = loadMWIMeasurement<dataType>(argv[2], argc > 4 ? atoi(argv[4]) : 85, cudaStream);
         measurement = loadMWIMeasurement<dataType>(argv[3], argc > 4 ? atoi(argv[4]) : 85, cudaStream);
     }
@@ -170,7 +170,7 @@ int main(int argc, char* argv[]) {
     // extract data type from model config and solve inverse problem
     // use different numerical solver for different source types
     if (modelConfig["jacobian"].type == json_none) {
-        if ((std::string(modelConfig["type"]) == "MWI") || (std::string(modelConfig["type"]) == "mwi")) {
+        if (modelConfig["mwi"].type != json_none) {
             solveInverseModelFromConfig<
                 models::MWI<numeric::CPUSolver, FEM::Equation<thrust::complex<double>, FEM::basis::Edge>>,
                 numeric::BiCGSTAB>(argc, argv, *config, cublasHandle, cudaStream);
