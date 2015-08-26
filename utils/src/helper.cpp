@@ -8,18 +8,18 @@ using namespace mpFlow;
 
 template <class dataType>
 std::shared_ptr<numeric::Matrix<dataType>> loadMWIMeasurement(
-    std::string const filename, unsigned const frequencyIndex, cudaStream_t const cudaStream) {
+    std::string const filename, unsigned const frequencyIndex, bool const useReflectionParameter, cudaStream_t const cudaStream) {
     return nullptr;
 }
 
 template std::shared_ptr<numeric::Matrix<float>> loadMWIMeasurement<float>(
-    std::string const, unsigned const, cudaStream_t const);
+    std::string const, unsigned const, bool const, cudaStream_t const);
 template std::shared_ptr<numeric::Matrix<double>> loadMWIMeasurement<double>(
-    std::string const, unsigned const, cudaStream_t const);
+    std::string const, unsigned const, bool const, cudaStream_t const);
 
 template <>
 std::shared_ptr<numeric::Matrix<thrust::complex<float>>> loadMWIMeasurement(
-    std::string const filename, unsigned const frequencyIndex, cudaStream_t const cudaStream) {
+    std::string const filename, unsigned const frequencyIndex, bool const useReflectionParameter, cudaStream_t const cudaStream) {
     // load double representation
     auto const floatMatrix = numeric::Matrix<float>::loadtxt(filename, cudaStream, ',');
 
@@ -39,14 +39,14 @@ std::shared_ptr<numeric::Matrix<thrust::complex<float>>> loadMWIMeasurement(
     double const Zw = Z0 / std::sqrt(1.0 - math::square(fc / ((*floatMatrix)(frequencyIndex, 0) * 1e9)));
     
     Eigen::ArrayXXcf const fields = (Eigen::MatrixXcf::Identity(dim, dim).array() + measurement) * Zw / (2.0 * 0.016) *
-        (-2.0 * Eigen::MatrixXcf::Identity(dim, dim).array() + Eigen::ArrayXXcf::Ones(dim, dim));
+        (-(useReflectionParameter ? 2.0 : 1.0) * Eigen::MatrixXcf::Identity(dim, dim).array() + Eigen::ArrayXXcf::Ones(dim, dim));
 
     return numeric::Matrix<thrust::complex<float>>::fromEigen(fields, cudaStream);
 }
 
 template <>
 std::shared_ptr<numeric::Matrix<thrust::complex<double>>> loadMWIMeasurement(
-    std::string const filename, unsigned const frequencyIndex, cudaStream_t const cudaStream) {
+    std::string const filename, unsigned const frequencyIndex, bool const useReflectionParameter, cudaStream_t const cudaStream) {
     // load double representation
     auto const floatMatrix = numeric::Matrix<double>::loadtxt(filename, cudaStream, ',');
 
@@ -66,7 +66,7 @@ std::shared_ptr<numeric::Matrix<thrust::complex<double>>> loadMWIMeasurement(
     double const Zw = Z0 / std::sqrt(1.0 - math::square(fc / ((*floatMatrix)(frequencyIndex, 0) * 1e9)));
     
     Eigen::ArrayXXcd const fields = (Eigen::MatrixXcd::Identity(dim, dim).array() + measurement) * Zw / (2.0 * 0.016) *
-        (-2.0 * Eigen::MatrixXcd::Identity(dim, dim).array() + Eigen::ArrayXXcd::Ones(dim, dim));
+        (-(useReflectionParameter ? 2.0 : 1.0) * Eigen::MatrixXcd::Identity(dim, dim).array() + Eigen::ArrayXXcd::Ones(dim, dim));
 
     return numeric::Matrix<thrust::complex<double>>::fromEigen(fields, cudaStream);
 }

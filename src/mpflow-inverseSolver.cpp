@@ -27,8 +27,11 @@ void solveInverseModelFromConfig(int argc, char* argv[], json_value const& confi
     // load measurement and reference data
     std::shared_ptr<numeric::Matrix<dataType>> reference = nullptr, measurement = nullptr;
     if (config["model"]["mwi"].type != json_none) {
-        reference = loadMWIMeasurement<dataType>(argv[2], argc > 4 ? atoi(argv[4]) : 85, cudaStream);
-        measurement = loadMWIMeasurement<dataType>(argv[3], argc > 4 ? atoi(argv[4]) : 85, cudaStream);
+        unsigned const frequencyIndex = argc > 4 ? atoi(argv[4]) : 85;
+        bool const useReflectionParameter = argc > 5 ? (atoi(argv[5]) < 1 ? false : true) : true;
+
+        reference = loadMWIMeasurement<dataType>(argv[2], frequencyIndex, useReflectionParameter, cudaStream);
+        measurement = loadMWIMeasurement<dataType>(argv[3], frequencyIndex, useReflectionParameter, cudaStream);
     }
     else {
         if (argc == 3) {
@@ -39,7 +42,7 @@ void solveInverseModelFromConfig(int argc, char* argv[], json_value const& confi
         else {
             reference = numeric::Matrix<dataType>::loadtxt(argv[2], cudaStream);
             measurement = numeric::Matrix<dataType>::loadtxt(argv[3], cudaStream);
-        }        
+        }
     }
 
     time.restart();
