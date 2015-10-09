@@ -44,21 +44,21 @@ void solveForwardModelFromConfig(json_value const& config, std::string const pat
         catch (std::exception const& exception) {
             str::print("Error: Invalid config file");
             str::print("Error message:", exception.what());
-            
-            return std::shared_ptr<modelType>(nullptr);            
+
+            return std::shared_ptr<modelType>(nullptr);
         }
     }();
     if (forwardModel == nullptr) {
         return;
     }
-    
+
     // load predefined material distribution from file, if path is given
     auto const material = [=](json_value const& material) -> std::shared_ptr<numeric::Matrix<dataType>> {
         if (material.type == json_string) {
             return numeric::Matrix<dataType>::loadtxt(str::format("%s/%s")(path, std::string(material)), cudaStream);
         }
         else if ((material.type == json_object) && (material["distribution"].type == json_string)) {
-            return numeric::Matrix<dataType>::loadtxt(str::format("%s/%s")(path, std::string(material["distribution"])), cudaStream);            
+            return numeric::Matrix<dataType>::loadtxt(str::format("%s/%s")(path, std::string(material["distribution"])), cudaStream);
         }
         else {
             return std::make_shared<numeric::Matrix<dataType>>(forwardModel->mesh->elements.rows(), 1,
@@ -69,28 +69,65 @@ void solveForwardModelFromConfig(json_value const& config, std::string const pat
     cudaStreamSynchronize(cudaStream);
     str::print("Time:", time.elapsed() * 1e3, "ms");
 
-    str::print("----------------------------------------------------");
-    str::print("Solve electrical potential for all excitations");
-    time.restart();
+    if (material->cols == 1) {
+        str::print("----------------------------------------------------");
+        str::print("Solve for a single material distribution");
+        time.restart();
 
-    // solve forward model
-    unsigned steps = 0;
-    auto const result = forwardModel->solve(material, cublasHandle, cudaStream, &steps);
+        // solve forward model
+        unsigned steps = 0;
+        auto const result = forwardModel->solve(material, cublasHandle, cudaStream, &steps);
 
-    cudaStreamSynchronize(cudaStream);
-    str::print("Time:", time.elapsed() * 1e3, "ms");
-    str::print("Steps:", steps);
+        cudaStreamSynchronize(cudaStream);
+        str::print("----------------------------------------------------");
+        str::print("Time:", time.elapsed() * 1e3, "ms");
+        str::print("Steps:", steps);
 
-    // Print and save results
-    result->copyToHost(cudaStream);
-    forwardModel->field->copyToHost(cudaStream);
-    cudaStreamSynchronize(cudaStream);
+        // Print and save results
+        result->copyToHost(cudaStream);
+        forwardModel->field->copyToHost(cudaStream);
+        cudaStreamSynchronize(cudaStream);
 
-    str::print("----------------------------------------------------");
-    str::print("Result:");
-    printResult(result);
-    result->savetxt(str::format("%s/result.txt")(path));
-    forwardModel->field->savetxt(str::format("%s/field.txt")(path));
+        str::print("----------------------------------------------------");
+        str::print("Result:");
+        printResult(result);
+        result->savetxt(str::format("%s/result.txt")(path));
+        forwardModel->field->savetxt(str::format("%s/field.txt")(path));        
+    }
+    else {
+        str::print("----------------------------------------------------");
+        str::print("Perform Material Sweep");
+
+        for (int i = 0; i < material->cols; ++i) {
+            str::print("----------------------------------------------------");
+            str::print("Material Distribution:", i);
+            time.restart();
+
+            // exctract single material distribution
+            auto const mat = numeric::Matrix<dataType>::fromEigen(material->toEigen().col(i), cudaStream);            
+
+            // solve forward model
+            unsigned steps = 0;
+            auto const result = forwardModel->solve(mat, cublasHandle, cudaStream, &steps);
+
+            cudaStreamSynchronize(cudaStream);
+            str::print("Time:", time.elapsed() * 1e3, "ms");
+            str::print("Steps:", steps);
+
+            // Print and save results
+            result->copyToHost(cudaStream);
+            forwardModel->field->copyToHost(cudaStream);
+            cudaStreamSynchronize(cudaStream);
+
+            str::print("----------------------------------------------------");
+            str::print("Result:");
+            printResult(result);
+
+            mkdir(str::format("%s/results")(path).c_str(), 0777);
+            result->savetxt(str::format("%s/results/result_%d.txt")(path, i));
+            forwardModel->field->savetxt(str::format("%s/results/field_%d.txt")(path, i));        
+        }
+    }
 }
 
 int main(int argc, char* argv[]) {
@@ -143,7 +180,7 @@ int main(int argc, char* argv[]) {
     // use different numerical solver for different source types
     if (modelConfig["mwi"].type != json_none) {
         solveForwardModelFromConfig<models::MWI<numeric::CPUSolver, FEM::Equation<thrust::complex<double>, FEM::basis::Edge, false>>>(
-            modelConfig, path, cublasHandle, cudaStream);            
+            modelConfig, path, cublasHandle, cudaStream);
     }
     else {
         if (std::string(modelConfig["source"]["type"]) == "voltage") {
@@ -153,7 +190,7 @@ int main(int argc, char* argv[]) {
             }
             else {
                 solveForwardModelFromConfig<models::EIT<numeric::BiCGSTAB, FEM::Equation<double, FEM::basis::Linear, false>>>(
-                    modelConfig, path, cublasHandle, cudaStream);            
+                    modelConfig, path, cublasHandle, cudaStream);
             }
         }
         else {
@@ -163,9 +200,9 @@ int main(int argc, char* argv[]) {
             }
             else {
                 solveForwardModelFromConfig<models::EIT<numeric::ConjugateGradient, FEM::Equation<double, FEM::basis::Linear, false>>>(
-                    modelConfig, path, cublasHandle, cudaStream);            
+                    modelConfig, path, cublasHandle, cudaStream);
             }
-        }        
+        }
     }
 
     // cleanup
