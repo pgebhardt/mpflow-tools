@@ -80,26 +80,26 @@ void solveInverseModelFromConfig(int argc, char* argv[], json_value const& confi
 
         unsigned steps = 0;
         solver->solveDifferential(cublasHandle, cudaStream, maxIterations, &steps);
-    
+
         cudaStreamSynchronize(cudaStream);
         str::print("Time per image:", time.elapsed() * 1e3 / solver->measurement.size(), "ms, FPS:",
-            solver->measurement.size() / time.elapsed(), "Hz, Iterations:", steps);        
+            solver->measurement.size() / time.elapsed(), "Hz, Iterations:", steps);
     }
     else {
         // correct measurement
         solver->calculation[0]->scalarMultiply(-1.0, cudaStream);
         solver->measurement[0]->add(solver->calculation[0], cudaStream);
-        solver->measurement[0]->add(solver->forwardModel->result, cudaStream);    
-        
+        solver->measurement[0]->add(solver->forwardModel->result, cudaStream);
+
         cudaStreamSynchronize(cudaStream);
         time.restart();
 
         for (unsigned step = 0; step < newtonSteps; ++step) {
             solver->solveAbsolute(1, cublasHandle, cudaStream);
-            
+
             solver->materialDistribution->copyToHost(cudaStream);
             cudaStreamSynchronize(cudaStream);
-            
+
             // calculate some metrices
             auto const temp = std::make_shared<numeric::Matrix<dataType>>(solver->measurement[0]->rows,
                 solver->measurement[0]->cols, cudaStream);
@@ -107,7 +107,7 @@ void solveInverseModelFromConfig(int argc, char* argv[], json_value const& confi
             temp->copyToHost(cudaStream);
             solver->forwardModel->result->copyToHost(cudaStream);
             cudaStreamSynchronize(cudaStream);
-            
+
             auto const temp2 = solver->materialDistribution->toEigen();
             str::print("step:", step,
                 "difference:", sqrt((temp->toEigen() - solver->forwardModel->result->toEigen()).abs().square().sum()),
@@ -115,10 +115,9 @@ void solveInverseModelFromConfig(int argc, char* argv[], json_value const& confi
                 "mean:", temp2.sum() / typename typeTraits::convertComplexType<dataType>::type(temp2.size()),
                 "min:", str::format("(%f,%f)")(temp2.real().minCoeff(), temp2.imag().minCoeff()));
         }
-        
+
         cudaStreamSynchronize(cudaStream);
-        str::print("Time:", time.elapsed() * 1e3, "ms");                        
-        
+        str::print("Time:", time.elapsed() * 1e3, "ms");
     }
 
     // Save results
