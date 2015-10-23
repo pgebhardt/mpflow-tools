@@ -1,6 +1,8 @@
+#include "json.h"
 #include <mpflow/mpflow.h>
 #include <distmesh/distmesh.h>
 #include <sys/stat.h>
+#include <ctime>
 #include "stringtools/all.hpp"
 #include "helper.h"
 
@@ -158,4 +160,73 @@ std::string getCompilerName() {
 #else
     return "<unknown>";
 #endif
+}
+
+// create a string containing current date
+std::string getCurrentDate() {
+    // get current time
+    time_t rawtime;
+    time(&rawtime);
+
+    // extract time info
+    struct tm* timeinfo = localtime(&rawtime);
+
+    // parse time info to string
+    char buffer[15];
+    strftime(buffer, 15, "%Y%m%d", timeinfo);
+
+    return std::string(buffer);
+}
+
+// extract raw filename without extension and path from given path
+std::string getRawFilename(std::string const& path) {
+    std::string filename = path;
+
+    // get rid of complete path
+    auto pos = path.rfind('/', path.length());
+    if (pos != std::string::npos) {
+        filename = path.substr(pos + 1, path.length() - pos);
+    }
+
+    // get rid of file extension
+    pos = filename.rfind('.', filename.length());
+    if (pos != std::string::npos) {
+        filename = filename.substr(0, pos);
+    }
+
+    return filename;
+}
+
+// create proper file name for a reconstructed image
+std::string getReconstructionFileName(int const argc, char* const argv[], json_value const& config,
+    unsigned const iteration) {
+    if (config["model"]["mwi"].type == json_none) {
+        return str::format("RECON%s_%s_%s_%s_%s_RF%.0e_%s_%02dSteps_%02d.txt")(
+            getCurrentDate(),
+            getRawFilename(argc == 3 ? argv[2] : argv[3]),
+            getRawFilename(argc == 3 ? "noRef" : argv[2]),
+            config["model"]["source"]["type"].type == json_string ? std::string(config["model"]["source"]["type"]) : "current",
+            config["model"]["numericType"].type == json_string ? std::string(config["model"]["numericType"]) : "real",
+            config["solver"]["regularizationFactor"].u.dbl,
+            std::string(config["solver"]["regularizationType"]),
+            std::max(1l, config["solver"]["steps"].u.integer), iteration + 1);
+    }
+    else {
+        // parse command line arguments
+        bool const useReflectionParameter = argc > 5 ? (atoi(argv[5]) < 1 ? false : true) : true;
+
+        auto const material = mpFlow::jsonHelper::parseNumericValue<thrust::complex<double>>(config["model"]["material"]);
+        auto const frequency = config["model"]["mwi"]["frequency"].u.dbl * 1e-9;
+
+        return str::format("RECON%s_%s_%s_eps-ref_r%.1f_i%.1f_%.0fG%.0f_%s_RF%.0e_%s_%02dSteps_%02d.txt")(
+            getCurrentDate(),
+            getRawFilename(argv[3]),
+            getRawFilename(argv[2]),
+            material.real(), material.imag(),
+            frequency, (frequency - floor(frequency)) * 1e2,
+            useReflectionParameter ? "wRefl" : "noRefl",
+            config["solver"]["regularizationFactor"].u.dbl,
+            std::string(config["solver"]["regularizationType"]),
+            std::max(1l, config["solver"]["steps"].u.integer), iteration + 1);
+    }
 }

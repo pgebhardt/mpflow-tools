@@ -55,7 +55,7 @@ void solveInverseModelFromConfig(int argc, char* argv[], json_value const& confi
         str::print("Could not create solver from config");
         return;
     }
-    
+
     // copy measurement and reference data to solver
     for (auto mes : solver->measurement) {
         mes->copy(measurement, cudaStream);
@@ -84,6 +84,12 @@ void solveInverseModelFromConfig(int argc, char* argv[], json_value const& confi
         cudaStreamSynchronize(cudaStream);
         str::print("Time per image:", time.elapsed() * 1e3 / solver->measurement.size(), "ms, FPS:",
             solver->measurement.size() / time.elapsed(), "Hz, Iterations:", steps);
+
+        // Save results
+        solver->materialDistribution->copyToHost(cudaStream);
+        cudaStreamSynchronize(cudaStream);
+        solver->materialDistribution->savetxt(str::format("%s/%s")(
+            path, getReconstructionFileName(argc, argv, config, 0)));
     }
     else {
         // correct measurement
@@ -114,16 +120,17 @@ void solveInverseModelFromConfig(int argc, char* argv[], json_value const& confi
                 "max:", str::format("(%f,%f)")(temp2.real().maxCoeff(), temp2.imag().maxCoeff()),
                 "mean:", temp2.sum() / typename typeTraits::convertComplexType<dataType>::type(temp2.size()),
                 "min:", str::format("(%f,%f)")(temp2.real().minCoeff(), temp2.imag().minCoeff()));
+
+            // Save results
+            solver->materialDistribution->copyToHost(cudaStream);
+            cudaStreamSynchronize(cudaStream);
+            solver->materialDistribution->savetxt(str::format("%s/%s")(
+                path, getReconstructionFileName(argc, argv, config, step)));
         }
 
         cudaStreamSynchronize(cudaStream);
         str::print("Time:", time.elapsed() * 1e3, "ms");
     }
-
-    // Save results
-    solver->materialDistribution->copyToHost(cudaStream);
-    cudaStreamSynchronize(cudaStream);
-    solver->materialDistribution->savetxt(str::format("%s/reconstruction.txt")(path));
 }
 
 int main(int argc, char* argv[]) {
