@@ -173,7 +173,7 @@ std::string getCurrentDate() {
 
     // parse time info to string
     char buffer[15];
-    strftime(buffer, 15, "%Y%m%d", timeinfo);
+    strftime(buffer, 15, "%y%m%d", timeinfo);
 
     return std::string(buffer);
 }
@@ -218,13 +218,14 @@ std::string getReconstructionFileName(int const argc, char* const argv[], json_v
         auto const material = mpFlow::jsonHelper::parseNumericValue<thrust::complex<double>>(config["model"]["material"]);
         auto const frequency = config["model"]["mwi"]["frequency"].u.dbl * 1e-9;
 
-        return str::format("RECON%s_%s_%s_eps-ref_r%.1f_i%.1f_%.0fG%.0f_%s_RF%.0e_%s_%02dSteps_%02d.txt")(
+        return str::format("R%s_%s_%s_ref_r%.0f_%.0f_i%.0f_%.0f_%.0fG%.0f_%s_RF%.0e_%s_%02dSt_%02d.txt")(
             getCurrentDate(),
             getRawFilename(argv[3]),
             getRawFilename(argv[2]),
-            material.real(), material.imag(),
-            frequency, (frequency - floor(frequency)) * 1e2,
-            useReflectionParameter ? "wRefl" : "noRefl",
+            floor(material.real()), (material.real() - floor(material.real())) * 1e1,
+            floor(material.imag()), (material.imag() - floor(material.imag())) * 1e1,
+            floor(frequency), (frequency - floor(frequency)) * 1e2,
+            useReflectionParameter ? "wR" : "nR",
             config["solver"]["regularizationFactor"].u.dbl,
             std::string(config["solver"]["regularizationType"]),
             std::max(1l, config["solver"]["steps"].u.integer), iteration + 1);
