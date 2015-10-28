@@ -201,7 +201,7 @@ std::string getRawFilename(std::string const& path) {
 std::string getReconstructionFileName(int const argc, char* const argv[], json_value const& config,
     unsigned const iteration) {
     if (config["model"]["mwi"].type == json_none) {
-        return str::format("RECON%s_%s_%s_%s_%s_RF%.0e_%s_%02dSteps_%02d.txt")(
+        return str::format("R%s_%s_%s_%s_%s_RF%.0e_%s_%02dSt_%02d.txt")(
             getCurrentDate(),
             getRawFilename(argc == 3 ? argv[2] : argv[3]),
             getRawFilename(argc == 3 ? "noRef" : argv[2]),
@@ -209,7 +209,7 @@ std::string getReconstructionFileName(int const argc, char* const argv[], json_v
             config["model"]["numericType"].type == json_string ? std::string(config["model"]["numericType"]) : "real",
             config["solver"]["regularizationFactor"].u.dbl,
             std::string(config["solver"]["regularizationType"]),
-            std::max(1l, config["solver"]["steps"].u.integer), iteration + 1);
+            std::max(1, (int)config["solver"]["steps"].u.integer), iteration + 1);
     }
     else {
         // parse command line arguments
@@ -228,6 +228,6 @@ std::string getReconstructionFileName(int const argc, char* const argv[], json_v
             useReflectionParameter ? "wR" : "nR",
             config["solver"]["regularizationFactor"].u.dbl,
             std::string(config["solver"]["regularizationType"]),
-            std::max(1l, config["solver"]["steps"].u.integer), iteration + 1);
+            std::max(1, (int)config["solver"]["steps"].u.integer), iteration + 1);
     }
 }

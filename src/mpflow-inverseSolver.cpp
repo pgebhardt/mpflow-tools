@@ -49,12 +49,12 @@ void solveInverseModelFromConfig(int argc, char* argv[], json_value const& confi
     str::print("----------------------------------------------------");
     str::print("Create and initialize solver");
 
+    // create solver according to json config
     auto const solver = solver::Solver<forwardModelType, numericalSolverType>::fromConfig(
         config, cublasHandle, cudaStream, path);
-    if (solver == nullptr) {
-        str::print("Could not create solver from config");
-        return;
-    }
+
+    cudaStreamSynchronize(cudaStream);
+    str::print("Time:", time.elapsed() * 1e3, "ms");
 
     // copy measurement and reference data to solver
     for (auto mes : solver->measurement) {
@@ -64,72 +64,58 @@ void solveInverseModelFromConfig(int argc, char* argv[], json_value const& confi
         cal->copy(reference, cudaStream);
     }
 
-    cudaStreamSynchronize(cudaStream);
-    str::print("Time:", time.elapsed() * 1e3, "ms");
-
     // read out amount of newton and numerical solver steps for reconstruction
-    int const maxIterations = config["solver"]["maxIterations"].u.integer;
-    int const newtonSteps = std::max(1, (int)config["solver"]["steps"].u.integer);
+    auto const maxIterations = config["solver"]["maxIterations"].u.integer;
+    auto const newtonSteps = std::max(1, (int)config["solver"]["steps"].u.integer);
+
+    // correct measurement data to enable for absolute reconstruction
+    if (newtonSteps > 1) {
+        reference->scalarMultiply(-1.0, cudaStream);
+        solver->measurement[0]->add(reference, cudaStream);
+        solver->measurement[0]->add(solver->forwardModel->result, cudaStream);
+        solver->calculation[0]->copy(solver->forwardModel->result, cudaStream);
+    }
 
     str::print("----------------------------------------------------");
     str::print("Reconstruct image");
 
-    // reconstruct image
-    if (newtonSteps == 1) {
-        time.restart();
-
-        unsigned steps = 0;
-        solver->solveDifferential(cublasHandle, cudaStream, maxIterations, &steps);
+    // reconstruct the image
+    for (unsigned step = 0; step < newtonSteps; ++step) {
+        str::print("----------------------------------------------------");
+        str::print("Step:", step + 1);
 
         cudaStreamSynchronize(cudaStream);
-        str::print("Time per image:", time.elapsed() * 1e3 / solver->measurement.size(), "ms, FPS:",
-            solver->measurement.size() / time.elapsed(), "Hz, Iterations:", steps);
+        time.restart();
 
-        // Save results
+        // do one newton iteration
+        unsigned iterations = 0;
+        if (step == 0) {
+            solver->solveDifferential(cublasHandle, cudaStream, maxIterations, &iterations);
+        }
+        else {
+            solver->solveAbsolute(cublasHandle, cudaStream, maxIterations, &iterations);
+        }
+
+        // print out reconstruction time
+        cudaStreamSynchronize(cudaStream);
+        str::print("Time:", time.elapsed() * 1e3 / solver->measurement.size(), "ms, Iterations:", iterations);
+
+        // save reconstruction to file
         solver->materialDistribution->copyToHost(cudaStream);
         cudaStreamSynchronize(cudaStream);
         solver->materialDistribution->savetxt(str::format("%s/%s")(
-            path, getReconstructionFileName(argc, argv, config, 0)));
-    }
-    else {
-        // correct measurement
-        solver->calculation[0]->scalarMultiply(-1.0, cudaStream);
-        solver->measurement[0]->add(solver->calculation[0], cudaStream);
-        solver->measurement[0]->add(solver->forwardModel->result, cudaStream);
+            path, getReconstructionFileName(argc, argv, config, step)));
 
+        // calculate some metrices
+        solver->measurement[0]->copyToHost(cudaStream);
+        solver->calculation[0]->copyToHost(cudaStream);
         cudaStreamSynchronize(cudaStream);
-        time.restart();
 
-        for (unsigned step = 0; step < newtonSteps; ++step) {
-            solver->solveAbsolute(1, cublasHandle, cudaStream);
-
-            solver->materialDistribution->copyToHost(cudaStream);
-            cudaStreamSynchronize(cudaStream);
-
-            // calculate some metrices
-            auto const temp = std::make_shared<numeric::Matrix<dataType>>(solver->measurement[0]->rows,
-                solver->measurement[0]->cols, cudaStream);
-            temp->copy(solver->measurement[0], cudaStream);
-            temp->copyToHost(cudaStream);
-            solver->forwardModel->result->copyToHost(cudaStream);
-            cudaStreamSynchronize(cudaStream);
-
-            auto const temp2 = solver->materialDistribution->toEigen();
-            str::print("step:", step,
-                "difference:", sqrt((temp->toEigen() - solver->forwardModel->result->toEigen()).abs().square().sum()),
-                "max:", str::format("(%f,%f)")(temp2.real().maxCoeff(), temp2.imag().maxCoeff()),
-                "mean:", temp2.sum() / typename typeTraits::convertComplexType<dataType>::type(temp2.size()),
-                "min:", str::format("(%f,%f)")(temp2.real().minCoeff(), temp2.imag().minCoeff()));
-
-            // Save results
-            solver->materialDistribution->copyToHost(cudaStream);
-            cudaStreamSynchronize(cudaStream);
-            solver->materialDistribution->savetxt(str::format("%s/%s")(
-                path, getReconstructionFileName(argc, argv, config, step)));
-        }
-
-        cudaStreamSynchronize(cudaStream);
-        str::print("Time:", time.elapsed() * 1e3, "ms");
+        auto const materialDistribution = solver->materialDistribution->toEigen();
+        str::print("Difference:", sqrt((solver->measurement[0]->toEigen() - solver->calculation[0]->toEigen()).abs().square().sum()),
+            "Max:", str::format("%f")(abs(materialDistribution).maxCoeff()),
+            "Mean:", materialDistribution.sum() / typename typeTraits::convertComplexType<dataType>::type(materialDistribution.size()),
+            "Min:", str::format("%f")(abs(materialDistribution).minCoeff()));
     }
 }
 
@@ -175,7 +161,7 @@ int main(int argc, char* argv[]) {
         str::print("Error: Invalid model config");
         return EXIT_FAILURE;
     }
-    
+
     // extract data type from model config and solve inverse problem
     // use different numerical solver for different source types
     if (modelConfig["jacobian"].type == json_none) {
@@ -208,7 +194,7 @@ int main(int argc, char* argv[]) {
                         models::EIT<numeric::ConjugateGradient, FEM::Equation<double, FEM::basis::Linear>>,
                         numeric::ConjugateGradient>(argc, argv, *config, cublasHandle, cudaStream);
                 }
-            }            
+            }
         }
     }
     else {
