@@ -45,77 +45,91 @@ void solveInverseModelFromConfig(int argc, char* argv[], json_value const& confi
         }
     }
 
-    time.restart();
-    str::print("----------------------------------------------------");
-    str::print("Create and initialize solver");
-
-    // create solver according to json config
-    auto const solver = solver::Solver<forwardModelType, numericalSolverType>::fromConfig(
-        config, cublasHandle, cudaStream, path);
-
-    cudaStreamSynchronize(cudaStream);
-    str::print("Time:", time.elapsed() * 1e3, "ms");
-
-    // copy measurement and reference data to solver
-    for (auto mes : solver->measurement) {
-        mes->copy(measurement, cudaStream);
-    }
-    for (auto cal : solver->calculation) {
-        cal->copy(reference, cudaStream);
-    }
-
-    // read out amount of newton and numerical solver steps for reconstruction
-    auto const maxIterations = config["solver"]["maxIterations"].u.integer;
-    auto const newtonSteps = std::max(1, (int)config["solver"]["steps"].u.integer);
-
-    // correct measurement data to enable for absolute reconstruction
-    if (newtonSteps > 1) {
-        reference->scalarMultiply(-1.0, cudaStream);
-        solver->measurement[0]->add(reference, cudaStream);
-        solver->measurement[0]->add(solver->forwardModel->result, cudaStream);
-        solver->calculation[0]->copy(solver->forwardModel->result, cudaStream);
-    }
-
-    str::print("----------------------------------------------------");
-    str::print("Reconstruct image");
-
-    // reconstruct the image
-    for (unsigned step = 0; step < newtonSteps; ++step) {
+    // read out amount of repetitions for benchmark purpose
+    auto const repetitions = std::max(1, (int)config["repetitions"].u.integer);
+    if (repetitions > 1) {
         str::print("----------------------------------------------------");
-        str::print("Step:", step + 1);
+        str::print("Repeate reconstruction", repetitions, "times");
+    }
 
-        cudaStreamSynchronize(cudaStream);
+    for (unsigned repetition = 0; repetition < repetitions; ++repetition) {
+        if (repetitions > 1) {
+            str::print("----------------------------------------------------");
+            str::print("Repetition", repetition + 1);
+        }
+
+        str::print("----------------------------------------------------");
+        str::print("Create and initialize solver");
         time.restart();
 
-        // do one newton iteration
-        unsigned iterations = 0;
-        if (step == 0) {
-            solver->solveDifferential(cublasHandle, cudaStream, maxIterations, &iterations);
+        // create solver according to json config
+        auto const solver = solver::Solver<forwardModelType, numericalSolverType>::fromConfig(
+            config, cublasHandle, cudaStream, path);
+
+        cudaStreamSynchronize(cudaStream);
+        str::print("Time:", time.elapsed() * 1e3, "ms");
+
+        // copy measurement and reference data to solver
+        for (auto mes : solver->measurement) {
+            mes->copy(measurement, cudaStream);
         }
-        else {
-            solver->solveAbsolute(cublasHandle, cudaStream, maxIterations, &iterations);
+        for (auto cal : solver->calculation) {
+            cal->copy(reference, cudaStream);
         }
 
-        // print out reconstruction time
-        cudaStreamSynchronize(cudaStream);
-        str::print("Time:", time.elapsed() * 1e3 / solver->measurement.size(), "ms, Iterations:", iterations);
+        // read out amount of newton and numerical solver steps for reconstruction
+        auto const maxIterations = config["solver"]["maxIterations"].u.integer;
+        auto const newtonSteps = std::max(1, (int)config["solver"]["steps"].u.integer);
 
-        // save reconstruction to file
-        solver->materialDistribution->copyToHost(cudaStream);
-        cudaStreamSynchronize(cudaStream);
-        solver->materialDistribution->savetxt(str::format("%s/%s")(
-            path, getReconstructionFileName(argc, argv, config, step)));
+        // correct measurement data to enable for absolute reconstruction
+        if (newtonSteps > 1) {
+            reference->scalarMultiply(-1.0, cudaStream);
+            solver->measurement[0]->add(reference, cudaStream);
+            solver->measurement[0]->add(solver->forwardModel->result, cudaStream);
+            solver->calculation[0]->copy(solver->forwardModel->result, cudaStream);
+        }
 
-        // calculate some metrices
-        solver->measurement[0]->copyToHost(cudaStream);
-        solver->calculation[0]->copyToHost(cudaStream);
-        cudaStreamSynchronize(cudaStream);
+        str::print("----------------------------------------------------");
+        str::print("Reconstruct image");
 
-        auto const materialDistribution = solver->materialDistribution->toEigen();
-        str::print("Difference:", sqrt((solver->measurement[0]->toEigen() - solver->calculation[0]->toEigen()).abs().square().sum()),
-            "Max:", str::format("%f")(abs(materialDistribution).maxCoeff()),
-            "Mean:", materialDistribution.sum() / typename typeTraits::convertComplexType<dataType>::type(materialDistribution.size()),
-            "Min:", str::format("%f")(abs(materialDistribution).minCoeff()));
+        // reconstruct the image
+        for (unsigned step = 0; step < newtonSteps; ++step) {
+            str::print("----------------------------------------------------");
+            str::print("Step:", step + 1);
+
+            cudaStreamSynchronize(cudaStream);
+            time.restart();
+
+            // do one newton iteration
+            unsigned iterations = 0;
+            if (step == 0) {
+                solver->solveDifferential(cublasHandle, cudaStream, maxIterations, &iterations);
+            }
+            else {
+                solver->solveAbsolute(cublasHandle, cudaStream, maxIterations, &iterations);
+            }
+
+            // print out reconstruction time
+            cudaStreamSynchronize(cudaStream);
+            str::print("Time:", time.elapsed() * 1e3 / solver->measurement.size(), "ms, Iterations:", iterations);
+
+            // save reconstruction to file
+            solver->materialDistribution->copyToHost(cudaStream);
+            cudaStreamSynchronize(cudaStream);
+            solver->materialDistribution->savetxt(str::format("%s/%s")(
+                path, getReconstructionFileName(argc, argv, config, step)));
+
+            // calculate some metrices
+            solver->measurement[0]->copyToHost(cudaStream);
+            solver->calculation[0]->copyToHost(cudaStream);
+            cudaStreamSynchronize(cudaStream);
+
+            auto const materialDistribution = solver->materialDistribution->toEigen();
+            str::print("Difference:", sqrt((solver->measurement[0]->toEigen() - solver->calculation[0]->toEigen()).abs().square().sum()),
+                "Max:", str::format("%f")(abs(materialDistribution).maxCoeff()),
+                "Mean:", materialDistribution.sum() / typename typeTraits::convertComplexType<dataType>::type(materialDistribution.size()),
+                "Min:", str::format("%f")(abs(materialDistribution).minCoeff()));
+        }
     }
 }
 
@@ -164,48 +178,96 @@ int main(int argc, char* argv[]) {
 
     // extract data type from model config and solve inverse problem
     // use different numerical solver for different source types
-    if (modelConfig["jacobian"].type == json_none) {
-        if (modelConfig["mwi"].type != json_none) {
-            solveInverseModelFromConfig<
-                models::MWI<numeric::CPUSolver, FEM::Equation<thrust::complex<double>, FEM::basis::Edge>>,
-                numeric::BiCGSTAB>(argc, argv, *config, cublasHandle, cudaStream);
-        }
-        else {
-            if (std::string(modelConfig["source"]["type"]) == "voltage") {
-                if ((std::string(modelConfig["numericType"]) == "complex") || (std::string(modelConfig["numericType"]) == "halfComplex")) {
-                    solveInverseModelFromConfig<
-                        models::EIT<numeric::BiCGSTAB, FEM::Equation<thrust::complex<double>, FEM::basis::Linear>>,
-                        numeric::BiCGSTAB>(argc, argv, *config, cublasHandle, cudaStream);
-                }
-                else {
-                    solveInverseModelFromConfig<
-                        models::EIT<numeric::BiCGSTAB, FEM::Equation<double, FEM::basis::Linear>>,
-                        numeric::BiCGSTAB>(argc, argv, *config, cublasHandle, cudaStream);
-                }
+    if (modelConfig["precision"].type == json_string && std::string(modelConfig["precision"]) == "single") {
+        if (modelConfig["jacobian"].type == json_none) {
+            if (modelConfig["mwi"].type != json_none) {
+                solveInverseModelFromConfig<
+                    models::MWI<numeric::CPUSolver, FEM::Equation<thrust::complex<float>, FEM::basis::Edge>>,
+                    numeric::BiCGSTAB>(argc, argv, *config, cublasHandle, cudaStream);
             }
             else {
-                if ((std::string(modelConfig["numericType"]) == "complex") || (std::string(modelConfig["numericType"]) == "halfComplex")) {
-                    solveInverseModelFromConfig<
-                        models::EIT<numeric::ConjugateGradient, FEM::Equation<thrust::complex<double>, FEM::basis::Linear>>,
-                        numeric::ConjugateGradient>(argc, argv, *config, cublasHandle, cudaStream);
+                if (std::string(modelConfig["source"]["type"]) == "voltage") {
+                    if ((std::string(modelConfig["numericType"]) == "complex") || (std::string(modelConfig["numericType"]) == "halfComplex")) {
+                        solveInverseModelFromConfig<
+                            models::EIT<numeric::BiCGSTAB, FEM::Equation<thrust::complex<float>, FEM::basis::Linear>>,
+                            numeric::BiCGSTAB>(argc, argv, *config, cublasHandle, cudaStream);
+                    }
+                    else {
+                        solveInverseModelFromConfig<
+                            models::EIT<numeric::BiCGSTAB, FEM::Equation<float, FEM::basis::Linear>>,
+                            numeric::BiCGSTAB>(argc, argv, *config, cublasHandle, cudaStream);
+                    }
                 }
                 else {
-                    solveInverseModelFromConfig<
-                        models::EIT<numeric::ConjugateGradient, FEM::Equation<double, FEM::basis::Linear>>,
-                        numeric::ConjugateGradient>(argc, argv, *config, cublasHandle, cudaStream);
+                    if ((std::string(modelConfig["numericType"]) == "complex") || (std::string(modelConfig["numericType"]) == "halfComplex")) {
+                        solveInverseModelFromConfig<
+                            models::EIT<numeric::ConjugateGradient, FEM::Equation<thrust::complex<float>, FEM::basis::Linear>>,
+                            numeric::ConjugateGradient>(argc, argv, *config, cublasHandle, cudaStream);
+                    }
+                    else {
+                        solveInverseModelFromConfig<
+                            models::EIT<numeric::ConjugateGradient, FEM::Equation<float, FEM::basis::Linear>>,
+                            numeric::ConjugateGradient>(argc, argv, *config, cublasHandle, cudaStream);
+                    }
                 }
+            }
+        }
+        else {
+            if (std::string(modelConfig["numericType"]) == "complex") {
+                solveInverseModelFromConfig<models::Constant<thrust::complex<float>>, numeric::BiCGSTAB>(
+                    argc, argv, *config, cublasHandle, cudaStream);
+            }
+            else {
+                solveInverseModelFromConfig<models::Constant<float>, numeric::BiCGSTAB>(
+                    argc, argv, *config, cublasHandle, cudaStream);
             }
         }
     }
     else {
-        if (std::string(modelConfig["numericType"]) == "complex") {
-            solveInverseModelFromConfig<models::Constant<thrust::complex<double>>, numeric::BiCGSTAB>(
-                argc, argv, *config, cublasHandle, cudaStream);
+        if (modelConfig["jacobian"].type == json_none) {
+            if (modelConfig["mwi"].type != json_none) {
+                solveInverseModelFromConfig<
+                    models::MWI<numeric::CPUSolver, FEM::Equation<thrust::complex<double>, FEM::basis::Edge>>,
+                    numeric::BiCGSTAB>(argc, argv, *config, cublasHandle, cudaStream);
+            }
+            else {
+                if (std::string(modelConfig["source"]["type"]) == "voltage") {
+                    if ((std::string(modelConfig["numericType"]) == "complex") || (std::string(modelConfig["numericType"]) == "halfComplex")) {
+                        solveInverseModelFromConfig<
+                            models::EIT<numeric::BiCGSTAB, FEM::Equation<thrust::complex<double>, FEM::basis::Linear>>,
+                            numeric::BiCGSTAB>(argc, argv, *config, cublasHandle, cudaStream);
+                    }
+                    else {
+                        solveInverseModelFromConfig<
+                            models::EIT<numeric::BiCGSTAB, FEM::Equation<double, FEM::basis::Linear>>,
+                            numeric::BiCGSTAB>(argc, argv, *config, cublasHandle, cudaStream);
+                    }
+                }
+                else {
+                    if ((std::string(modelConfig["numericType"]) == "complex") || (std::string(modelConfig["numericType"]) == "halfComplex")) {
+                        solveInverseModelFromConfig<
+                            models::EIT<numeric::ConjugateGradient, FEM::Equation<thrust::complex<double>, FEM::basis::Linear>>,
+                            numeric::ConjugateGradient>(argc, argv, *config, cublasHandle, cudaStream);
+                    }
+                    else {
+                        solveInverseModelFromConfig<
+                            models::EIT<numeric::ConjugateGradient, FEM::Equation<double, FEM::basis::Linear>>,
+                            numeric::ConjugateGradient>(argc, argv, *config, cublasHandle, cudaStream);
+                    }
+                }
+            }
         }
         else {
-            solveInverseModelFromConfig<models::Constant<double>, numeric::BiCGSTAB>(
-                argc, argv, *config, cublasHandle, cudaStream);            
+            if (std::string(modelConfig["numericType"]) == "complex") {
+                solveInverseModelFromConfig<models::Constant<thrust::complex<double>>, numeric::BiCGSTAB>(
+                    argc, argv, *config, cublasHandle, cudaStream);
+            }
+            else {
+                solveInverseModelFromConfig<models::Constant<double>, numeric::BiCGSTAB>(
+                    argc, argv, *config, cublasHandle, cudaStream);
+            }
         }
+
     }
 
     // cleanup
