@@ -97,6 +97,7 @@ void solveInverseModelFromConfig(int argc, char* argv[], json_value const& confi
             str::print("----------------------------------------------------");
             str::print("Step:", step + 1);
 
+            // restart execution timer
             cudaStreamSynchronize(cudaStream);
             time.restart();
 
@@ -109,9 +110,15 @@ void solveInverseModelFromConfig(int argc, char* argv[], json_value const& confi
                 solver->solveAbsolute(cublasHandle, cudaStream, maxIterations, &iterations);
             }
 
-            // print out reconstruction time
+            // get execution time for the reconstruction
             cudaStreamSynchronize(cudaStream);
-            str::print("Time:", time.elapsed() * 1e3 / solver->measurement.size(), "ms, Iterations:", iterations);
+            str::print("Time:", time.elapsed() * 1e3, "ms, Iterations:", iterations);
+
+            // print current optimization norm
+            solver->measurement[0]->copyToHost(cudaStream);
+            solver->calculation[0]->copyToHost(cudaStream);
+            cudaStreamSynchronize(cudaStream);
+            str::print("Optimization norm:", sqrt((solver->measurement[0]->toEigen() - solver->calculation[0]->toEigen()).abs().square().sum()));
 
             // save reconstruction to file
             solver->materialDistribution->copyToHost(cudaStream);
@@ -119,16 +126,22 @@ void solveInverseModelFromConfig(int argc, char* argv[], json_value const& confi
             solver->materialDistribution->savetxt(str::format("%s/%s")(
                 path, getReconstructionFileName(argc, argv, config, step)));
 
-            // calculate some metrices
-            solver->measurement[0]->copyToHost(cudaStream);
-            solver->calculation[0]->copyToHost(cudaStream);
+            // calculate some material metrices
+            auto const metrices = calculateMaterialMetrices<typename typeTraits::extractNumericalType<dataType>::type>(solver->materialDistribution->toEigen(),
+                solver->forwardModel->mesh);
+            str::print("Material norms:", "max:", std::get<0>(metrices), "min:", std::get<1>(metrices),
+                "mean:", std::get<2>(metrices), "standard deviation:", std::get<3>(metrices));
+
+        }
+
+        if (newtonSteps > 1) {
+            // calculate final optimization norm
+            solver->forwardModel->solve(solver->materialDistribution, cublasHandle, cudaStream);
+            solver->forwardModel->result->copyToHost(cudaStream);
             cudaStreamSynchronize(cudaStream);
 
-            auto const materialDistribution = solver->materialDistribution->toEigen();
-            str::print("Difference:", sqrt((solver->measurement[0]->toEigen() - solver->calculation[0]->toEigen()).abs().square().sum()),
-                "Max:", str::format("%f")(abs(materialDistribution).maxCoeff()),
-                "Mean:", materialDistribution.sum() / typename typeTraits::convertComplexType<dataType>::type(materialDistribution.size()),
-                "Min:", str::format("%f")(abs(materialDistribution).minCoeff()));
+            str::print("----------------------------------------------------");
+            str::print("Final optimization norm:", sqrt((solver->measurement[0]->toEigen() - solver->forwardModel->result->toEigen()).abs().square().sum()));
         }
     }
 }
