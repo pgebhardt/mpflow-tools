@@ -119,7 +119,7 @@ all: $(BINS)
 $(BINS): $(BUILD_DIR)/bin/% : $(BUILD_DIR)/objs/src/%.o $(UTILS_OBJS)
 	@echo [ Linking ] $@
 	@mkdir -p $(BUILD_DIR)/bin
-	$(CXX) -o $@ $< $(UTILS_OBJS) $(COMMON_FLAGS) $(LDFLAGS) $(LINKFLAGS)
+	@$(CXX) -o $@ $< $(UTILS_OBJS) $(COMMON_FLAGS) $(LDFLAGS) $(LINKFLAGS)
 
 $(BUILD_DIR)/objs/%.o: %.c
 	@echo [ CC ] $<
