@@ -58,7 +58,9 @@ endif
 ##############################
 # Includes and libraries
 ##############################
-LIBRARIES := mpflow_static distmesh_static qhullstatic cudart_static cublas_static culibos pthread dl
+LIBRARIES := pthread dl
+STATIC_LIBRARIES := mpflow_static distmesh_static qhull cudart_static cublas_static culibos
+
 LIBRARY_DIRS +=
 INCLUDE_DIRS += $(CUDA_DIR)/include ./utils/include ./utils/stringtools/include ./utils/json-parser
 
@@ -81,7 +83,7 @@ COMMON_FLAGS := $(addprefix -I, $(INCLUDE_DIRS)) -fPIC -D_TARGET_ARCH_NAME_=\"$(
 CFLAGS :=
 CXXFLAGS := -std=c++11
 LINKFLAGS := -fPIC -static-libstdc++
-LDFLAGS := $(addprefix -l, $(LIBRARIES)) $(addprefix -L, $(LIBRARY_DIRS)) $(addprefix -Xlinker -rpath , $(LIBRARY_DIRS))
+LDFLAGS := $(addsuffix .a, $(addprefix -l:lib, $(STATIC_LIBRARIES))) $(addprefix -l, $(LIBRARIES)) $(addprefix -L, $(LIBRARY_DIRS)) $(addprefix -Xlinker -rpath , $(LIBRARY_DIRS))
 
 # Use double precision floating points
 ifdef DOUBLE_PRECISION
@@ -117,7 +119,7 @@ all: $(BINS)
 $(BINS): $(BUILD_DIR)/bin/% : $(BUILD_DIR)/objs/src/%.o $(UTILS_OBJS)
 	@echo [ Linking ] $@
 	@mkdir -p $(BUILD_DIR)/bin
-	@$(CXX) -o $@ $< $(UTILS_OBJS) $(COMMON_FLAGS) $(LDFLAGS) $(LINKFLAGS)
+	$(CXX) -o $@ $< $(UTILS_OBJS) $(COMMON_FLAGS) $(LDFLAGS) $(LINKFLAGS)
 
 $(BUILD_DIR)/objs/%.o: %.c
 	@echo [ CC ] $<
