@@ -112,7 +112,7 @@ BINS := $(patsubst src%.cpp, $(BUILD_DIR)/bin%, $(CXX_SRCS))
 ##############################
 # Build targets
 ##############################
-.PHONY: all clean
+.PHONY: all install clean
 
 all: $(BINS)
 
@@ -130,6 +130,9 @@ $(BUILD_DIR)/objs/%.o: %.cpp
 	@echo [ CXX ] $<
 	@$(foreach d, $(subst /, ,${@D}), mkdir -p $d && cd $d && ):
 	@$(CXX) $(CXXFLAGS) $(COMMON_FLAGS) -c -o $@ $<
+
+install: $(BINS)
+	@$(foreach f, $(BINS), install -m 0755 $f $(prefix)/bin && ):
 
 clean:
 	@rm -rf $(ROOT_BUILD_DIR)
